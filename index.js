@@ -3,7 +3,7 @@ const cors = require("cors");
 const connectDB = require("./config/db");
 const cookieParser = require("cookie-parser");
 const dotenv = require("dotenv");
-
+const userRoute = require("./routes/UserRoute")
 
 
 dotenv.config();
@@ -20,6 +20,7 @@ app.use(express.json());
 const corsOptions = {
   origin: [
     "http://localhost:3000",
+    "http://localhost:3001",
   ],
   method: "GET, POST, PUT, DELETE, PATCH, OPTIONS, HEAD",
   credentials: true,
@@ -27,6 +28,7 @@ const corsOptions = {
 };
 
 app.use(cors(corsOptions));
+app.use("/api/auth", userRoute);
 // Root endpoint
 app.get("/", (req, res) => {
   res.send("Welcome to the authentication API");
