@@ -93,6 +93,30 @@ const getUserById = async (req, res) => {
   }
 };
 
+const getUserDetails = async (req, res) => {
+  try {
+    // Get the token from headers
+    const token = req.headers.authorization?.split(" ")[1]; // Extract Bearer token
+
+    if (!token) {
+      return res.status(401).json({ message: "Unauthorized: No token provided" });
+    }
+
+    // Verify token
+    const decoded = jwt.verify(token, process.env.JWT_SECRET_KEY);
+
+    // Find user by ID
+    const user = await User.findById(decoded.userId).select("-password"); // Exclude password
+
+    if (!user) {
+      return res.status(404).json({ message: "User not found" });
+    }
+
+    res.status(200).json(user);
+  } catch (error) {
+    res.status(401).json({ message: "Invalid or expired token" });
+  }
+};
 // Get All Users
 const getAllUsers = async (req, res) => {
   try {
@@ -108,4 +132,5 @@ module.exports = {
   updateUserById,
   getUserById,
   getAllUsers,
+  getUserDetails,
 };

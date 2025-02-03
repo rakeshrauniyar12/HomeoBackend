@@ -4,6 +4,7 @@ const connectDB = require("./config/db");
 const cookieParser = require("cookie-parser");
 const dotenv = require("dotenv");
 const userRoute = require("./routes/UserRoute")
+const appointmentRoute = require("./routes/BookAppointment.js")
 
 
 dotenv.config();
@@ -29,6 +30,7 @@ const corsOptions = {
 
 app.use(cors(corsOptions));
 app.use("/api/auth", userRoute);
+app.use("/api/appointment",appointmentRoute);
 // Root endpoint
 app.get("/", (req, res) => {
   res.send("Welcome to the authentication API");
