@@ -38,11 +38,15 @@ exports.addAppointment = async (req, res) => {
 };
 exports.getBookedTimeSlots = async (req, res) => {
   try {
-    const appointments = await Appointment.find({}, "startTime -_id"); // Fetch only startTime
+    // Fetch all appointments and only return the 'startTime' field
+    const appointments = await Appointment.find({}, "startTime");
+
+    // Map through appointments to get an array of 'startTime'
     const bookedSlots = appointments.map(
       (appointment) => appointment.startTime
     );
 
+    // Send the response with the booked slots
     res.status(200).json({ bookedSlots });
   } catch (error) {
     res.status(500).json({ error: error.message });
