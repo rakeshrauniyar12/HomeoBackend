@@ -1,115 +1,95 @@
 const Appointment = require("../models/BookAppointment.js");
 
-// Check for overlapping time slots
-const isTimeSlotAvailable = async (date, startTime, endTime, excludeId = null) => {
-  const query = {
-    date,
-    $or: [
-      { startTime: { $lt: endTime }, endTime: { $gt: startTime } }, // Overlapping condition
-    ],
-  };
-
-  if (excludeId) {
-    query._id = { $ne: excludeId }; // Exclude the current appointment in case of update
-  }
-
-  const existingAppointment = await Appointment.findOne(query);
-  return !existingAppointment; // Returns true if no overlap
-};
-
-// ✅ Book an Appointment
-exports.bookAppointment = async (req, res) => {
+exports.addAppointment = async (req, res) => {
   try {
-    const { firstName, lastName, email, phoneNumber, date, startTime } = req.body;
+    const { email, startTime } = req.body;
 
-    // Calculate end time (30 minutes after start time)
-    let [hours, minutes] = startTime.split(":").map(Number);
-    minutes += 30;
-    if (minutes >= 60) {
-      minutes -= 60;
-      hours += 1;
-    }
-    const endTime = `${String(hours).padStart(2, "0")}:${String(minutes).padStart(2, "0")}`;
+    // Check if an appointment already exists with the same email and startTime
+    const existingAppointment = await Appointment.findOne({ email, startTime });
 
-    // Check for time slot availability
-    const available = await isTimeSlotAvailable(date, startTime, endTime);
-    if (!available) {
-      return res.status(400).json({ message: "Time slot is already booked. Please choose another time." });
+    if (existingAppointment) {
+      return res.status(400).json({
+        message:
+          "Email is already registered at this time. Please visit your appointment page.",
+      });
     }
 
-    const appointment = new Appointment({
-      firstName,
-      lastName,
-      email,
-      phoneNumber,
-      date,
-      startTime,
-      endTime,
+    // Check if the startTime is already booked
+    const timeSlotTaken = await Appointment.findOne({ startTime });
+
+    if (timeSlotTaken) {
+      return res.status(400).json({
+        message:
+          "This time slot is already booked. Please choose a different time.",
+      });
+    }
+
+    // Proceed with booking the appointment
+    const newAppointment = new Appointment(req.body);
+    await newAppointment.save();
+
+    res.status(201).json({
+      message: "Appointment added successfully",
+      data: newAppointment,
     });
-
-    await appointment.save();
-    res.status(201).json({ message: "Appointment booked successfully", appointment });
   } catch (error) {
-    res.status(400).json({ error: error.message });
+    res.status(500).json({ error: error.message });
   }
 };
-
-// ✅ View Appointments by User Email
-exports.viewAppointmentsByUserEmail = async (req, res) => {
+exports.getBookedTimeSlots = async (req, res) => {
   try {
-    const { email } = req.params;
-    const appointments = await Appointment.find({ email });
+    const appointments = await Appointment.find({}, "startTime -_id"); // Fetch only startTime
+    const bookedSlots = appointments.map(
+      (appointment) => appointment.startTime
+    );
 
-    if (!appointments.length) {
-      return res.status(404).json({ message: "No appointments found for this user." });
+    res.status(200).json({ bookedSlots });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+};
+// View an appointment by ID
+exports.viewAppointment = async (req, res) => {
+  try {
+    const appointment = await Appointment.findById(req.params.id);
+    if (!appointment) {
+      return res.status(404).json({ message: "Appointment not found" });
     }
-
-    res.status(200).json(appointments);
+    res.status(200).json({ data: appointment });
   } catch (error) {
     res.status(500).json({ error: error.message });
   }
 };
 
-// ✅ View All Appointments
-exports.viewAllAppointments = async (req, res) => {
+// Update an appointment (can update any field)
+exports.updateAppointment = async (req, res) => {
   try {
-    const appointments = await Appointment.find();
-    res.status(200).json(appointments);
-  } catch (error) {
-    res.status(500).json({ error: error.message });
-  }
-};
-
-// ✅ Update Appointment (Partial Updates Supported)
-exports.updateAppointmentById = async (req, res) => {
-  try {
-    const { appointmentId } = req.params;
-    const updateFields = req.body;
-
-    if (updateFields.startTime) {
-      // Calculate new end time if startTime is being updated
-      let [hours, minutes] = updateFields.startTime.split(":").map(Number);
-      minutes += 30;
-      if (minutes >= 60) {
-        minutes -= 60;
-        hours += 1;
-      }
-      updateFields.endTime = `${String(hours).padStart(2, "0")}:${String(minutes).padStart(2, "0")}`;
-
-      // Check if new time slot is available
-      const available = await isTimeSlotAvailable(updateFields.date || req.body.date, updateFields.startTime, updateFields.endTime, appointmentId);
-      if (!available) {
-        return res.status(400).json({ message: "New time slot is already booked. Please choose another time." });
-      }
-    }
-
-    const updatedAppointment = await Appointment.findByIdAndUpdate(appointmentId, updateFields, { new: true });
-
+    const updatedAppointment = await Appointment.findByIdAndUpdate(
+      req.params.id,
+      req.body,
+      { new: true, runValidators: true }
+    );
     if (!updatedAppointment) {
       return res.status(404).json({ message: "Appointment not found" });
     }
+    res
+      .status(200)
+      .json({ message: "Appointment updated", data: updatedAppointment });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+};
 
-    res.status(200).json({ message: "Appointment updated successfully", updatedAppointment });
+// Delete an appointment
+exports.deleteAppointment = async (req, res) => {
+  try {
+    const deletedAppointment = await Appointment.findByIdAndDelete(
+      req.params.id
+    );
+    if (!deletedAppointment) {
+      return res.status(404).json({ message: "Appointment not found" });
+    }
+    res.status(200).json({ message: "Appointment deleted successfully" });
   } catch (error) {
     res.status(500).json({ error: error.message });
   }

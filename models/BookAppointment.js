@@ -16,13 +16,22 @@ const appointmentSchema = new mongoose.Schema({
     required: true,
     trim: true,
     lowercase: true,
-    match: [/\S+@\S+\.\S+/, "Invalid email format"],
   },
   phoneNumber: {
     type: String,
     required: true,
     trim: true,
     match: [/^[0-9]{10}$/, "Invalid phone number"],
+  },
+  doctorName: {
+    type: String,
+    required: true,
+    trim: true,
+  },
+  location: {
+    type: String,
+    required: true,
+    trim: true,
   },
   date: {
     type: Date,
@@ -31,17 +40,10 @@ const appointmentSchema = new mongoose.Schema({
   startTime: {
     type: String,
     required: true,
-    validate: {
-      validator: function (value) {
-        const [hours, minutes] = value.split(":").map(Number);
-        return minutes % 30 === 0; // Ensures only 30-min intervals
-      },
-      message: "Start time must be in 30-minute intervals (e.g., 9:00, 9:30)",
-    },
   },
-  endTime: {
-    type: String,
-    required: true,
+  cancelled: {
+    type: Boolean,
+    default: false, // Default value is false, meaning appointment is active
   },
 });
 
