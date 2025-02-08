@@ -22,6 +22,7 @@ const corsOptions = {
   origin: [
     "http://localhost:3000",
     "http://localhost:3001",
+    "https://homeop.vercel.app"
   ],
   method: "GET, POST, PUT, DELETE, PATCH, OPTIONS, HEAD",
   credentials: true,
