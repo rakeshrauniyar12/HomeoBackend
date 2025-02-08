@@ -63,6 +63,14 @@ exports.getBookedTimeSlots = async (req, res) => {
     res.status(500).json({ error: error.message });
   }
 };
+exports.getAllAppointments = async (req, res) => {
+  try {
+    const appointments = await Appointment.find();
+    res.status(200).json({ success: true, data: appointments });
+  } catch (error) {
+    res.status(500).json({ success: false, message: "Server Error", error: error.message });
+  }
+};
 exports.getAppointmentsByEmail = async (req, res) => {
   try {
     const { email } = req.params;
