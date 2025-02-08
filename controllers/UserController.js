@@ -45,13 +45,13 @@ const loginUser = async (req, res) => {
 
     if (!user) return res.status(400).json({ message: "Invalid credentials" });
 
-    if (user.signInMethod === "manual") {
+    if (req.body.signInMethod === "manual") {
       const isMatch = await bcrypt.compare(password, user.password);
       if (!isMatch)
         return res.status(400).json({ message: "Invalid credentials" });
     }
 
-    const token = jwt.sign({ id: user._id }, "your_jwt_secret", {
+    const token = jwt.sign({ id: user._id }, process.env.JWT_SECRET_KEY, {
       expiresIn: "1h",
     });
     res.json({ token, user });

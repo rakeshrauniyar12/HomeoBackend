@@ -34,16 +34,20 @@ const appointmentSchema = new mongoose.Schema({
     trim: true,
   },
   date: {
-    type: Date,
+    type: String,
     required: true,
   },
   startTime: {
     type: String,
     required: true,
   },
+  endTime: {
+    type: String,
+    required: true,
+  },
   cancelled: {
     type: Boolean,
-    default: false, // Default value is false, meaning appointment is active
+    default: false,
   },
 });
 
