@@ -5,7 +5,9 @@ const {
   getUserById,
   getAllUsers,
   updateUserById,
-  getUserDetails
+  getUserDetails,
+  getUserAppointmentsByEmail,
+  getAllAppointmentsFromUsers
 } = require("../controllers/UserController");
 
 const router = express.Router();
@@ -15,6 +17,8 @@ router.post("/register", registerUser);
 router.patch("/updatepassword/:userId", updateUserById);
 router.post("/login", loginUser);
 router.get("/getUserById/:userId", getUserById);
+router.get("/getUser/:email", getUserAppointmentsByEmail);
+router.get("/getUserAllAppointment", getAllAppointmentsFromUsers);
 router.get("/getAllUser", getAllUsers);
 router.get("/getuser", getAllUsers);
 

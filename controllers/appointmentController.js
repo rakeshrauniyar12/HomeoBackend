@@ -1,133 +1,277 @@
-const Appointment = require("../models/BookAppointment.js");
-const moment = require("moment");
+const Appointment = require("../models/Appointment");
+const User = require("../models/User");
+const Doctor = require("../models/Doctor");
+const moment = require("moment"); // Install moment.js for
 
 exports.addAppointment = async (req, res) => {
   try {
-    const { email, startTime, date } = req.body;
+    const {
+      firstName,
+      lastName,
+      email,
+      phoneNumber,
+      location,
+      consultationType,
+      doctorEmail,
+      date, // Expected format: "YYYY-MM-DD" from frontend
+      startTime,
+      medicines,
+      age,
+      gender,
+      password,
+    } = req.body;
 
-    // Check if an appointment already exists with the same email and startTime
-    const existingAppointment = await Appointment.findOne({ email, startTime });
+    // Convert input date to match database format (DD-MM-YYYY)
+    const formattedDate = moment(date, "YYYY-MM-DD").format("DD-MM-YYYY");
+
+    // Check if doctor exists
+    const doctor = await Doctor.findOne({ email: doctorEmail });
+    if (!doctor) {
+      return res.status(404).json({ message: "Doctor not found" });
+    }
+
+    // Check if doctor has schedule for the specified date
+    const scheduleForDate = doctor.schedule.find((schedule) => {
+      const startDate = moment(schedule.startDate, "DD-MM-YYYY");
+      const endDate = moment(schedule.endDate, "DD-MM-YYYY");
+      const appointmentDate = moment(formattedDate, "DD-MM-YYYY");
+      return appointmentDate.isBetween(startDate, endDate, null, "[]");
+    });
+
+    if (!scheduleForDate) {
+      return res
+        .status(400)
+        .json({ message: "Doctor does not have a schedule for this date" });
+    }
+
+    // Find the specific time slot for the given date
+    const timeSlot = scheduleForDate.timeSlots.find(
+      (slot) => slot.date === formattedDate && slot.time === startTime
+    );
+
+    if (!timeSlot || timeSlot.status !== "available") {
+      return res
+        .status(400)
+        .json({ message: "This time slot is either booked or unavailable" });
+    }
+
+    // Check if the appointment slot is already booked
+    const existingAppointment = await Appointment.findOne({
+      doctorEmail,
+      date: formattedDate,
+      startTime,
+    });
 
     if (existingAppointment) {
       return res.status(400).json({
-        message:
-          "Email is already registered at this time. Please visit your appointment page.",
+        message: "This time slot is already booked with this doctor.",
       });
     }
 
-    // Check if the startTime is already booked
-    const timeSlotTaken = await Appointment.findOne({ startTime });
-
-    if (timeSlotTaken) {
-      return res.status(400).json({
-        message:
-          "This time slot is already booked. Please choose a different time.",
+    // Check if user exists, otherwise create new user
+    let user = await User.findOne({ email });
+    if (!user) {
+      user = new User({
+        firstName,
+        lastName,
+        email,
+        phoneNumber,
+        age,
+        gender,
+        password,
       });
+      await user.save();
     }
 
-    // Convert startTime (e.g., "9:00 AM") to 24-hour format and add 15 minutes
-    const startTimeMoment = moment(startTime, "h:mm A"); // Parses 12-hour time format
-    const endTimeMoment = startTimeMoment.add(15, "minutes");
-
-    const endTime = endTimeMoment.format("h:mm A"); // Convert back to 12-hour format
-
-    // Format date as dd-mm-yyyy
-    const formattedDate = moment(date).format("DD-MM-YYYY");
-
-    // Proceed with booking the appointment
-    const newAppointment = new Appointment({ ...req.body, endTime, date: formattedDate });
-    await newAppointment.save();
-
-    res.status(201).json({
-      message: "Appointment added successfully",
-      data: newAppointment,
+    // Create new appointment
+    const appointment = new Appointment({
+      firstName,
+      lastName,
+      email,
+      phoneNumber,
+      location,
+      consultationType,
+      doctorEmail,
+      date: formattedDate,
+      startTime,
+      medicines,
     });
-  } catch (error) {
-    res.status(500).json({ error: error.message });
-  }
-};
+    await appointment.save();
 
-exports.getBookedTimeSlots = async (req, res) => {
-  try {
-    // Fetch all appointments and only return the 'startTime' field
-    const appointments = await Appointment.find({}, "startTime");
+    // Link appointment to user
+    user.appointments.push(appointment._id);
+    await user.save();
 
-    // Map through appointments to get an array of 'startTime'
-    const bookedSlots = appointments.map(
-      (appointment) => appointment.startTime
+    // Link appointment to doctor
+    doctor.appointments.push(appointment._id);
+    await doctor.save();
+
+    // **Fix: Update only the matching time slot for the correct date**
+    await Doctor.updateOne(
+      {
+        email: doctorEmail,
+        "schedule.timeSlots.date": formattedDate, // Match DD-MM-YYYY format
+        "schedule.timeSlots.time": startTime,
+      },
+      {
+        $set: { "schedule.$[].timeSlots.$[element].status": "booked" },
+      },
+      {
+        arrayFilters: [
+          { "element.time": startTime, "element.date": formattedDate }, // Ensure both date and time match
+        ],
+      }
     );
 
-    // Send the response with the booked slots
-    res.status(200).json({ bookedSlots });
+    res
+      .status(201)
+      .json({ message: "Appointment booked successfully", appointment });
   } catch (error) {
-    res.status(500).json({ error: error.message });
-  }
-};
-exports.getAllAppointments = async (req, res) => {
-  try {
-    const appointments = await Appointment.find();
-    res.status(200).json({ success: true, data: appointments });
-  } catch (error) {
-    res.status(500).json({ success: false, message: "Server Error", error: error.message });
-  }
-};
-exports.getAppointmentsByEmail = async (req, res) => {
-  try {
-    const { email } = req.params;
-    const appointments = await Appointment.find({ email });
-
-    if (!appointments.length) {
-      return res.status(404).json({ message: "No appointments found for this email." });
-    }
-
-    res.status(200).json({ data: appointments });
-  } catch (error) {
-    res.status(500).json({ error: error.message });
-  }
-};
-// View an appointment by ID
-exports.viewAppointment = async (req, res) => {
-  try {
-    const appointment = await Appointment.findById(req.params.id);
-    if (!appointment) {
-      return res.status(404).json({ message: "Appointment not found" });
-    }
-    res.status(200).json({ data: appointment });
-  } catch (error) {
-    res.status(500).json({ error: error.message });
+    res.status(500).json({ message: "Server error", error });
   }
 };
 
-// Update an appointment (can update any field)
+// Update Appointment
 exports.updateAppointment = async (req, res) => {
   try {
+    const { useremail, id } = req.params;
+    const user = await User.findOne({ email:useremail });
+
+    if (!user || !user.appointments.includes(id)) {
+      return res
+        .status(404)
+        .json({ message: "Appointment not found for this user" });
+    }
     const updatedAppointment = await Appointment.findByIdAndUpdate(
-      req.params.id,
+      id,
       req.body,
-      { new: true, runValidators: true }
+      { new: true }
     );
+    res.json(updatedAppointment);
+  } catch (error) {
+    res.status(500).json({ message: "Server error", error });
+  }
+};
+exports.addMedicineToAppointment = async (req, res) => {
+  try {
+    const { useremail, id } = req.params;
+
+    // Find user and check if the appointment belongs to them
+    const user = await User.findOne({ email: useremail });
+    if (!user || !user.appointments.includes(id)) {
+      return res
+        .status(404)
+        .json({ message: "Appointment not found for this user" });
+    }
+
+    // Update the appointment with a single medicine object
+    const updatedAppointment = await Appointment.findByIdAndUpdate(
+      id,
+      { medicine: req.body }, // Directly set the medicine object
+      { new: true }
+    );
+
     if (!updatedAppointment) {
       return res.status(404).json({ message: "Appointment not found" });
     }
-    res
-      .status(200)
-      .json({ message: "Appointment updated", data: updatedAppointment });
+
+    res.json(updatedAppointment);
   } catch (error) {
-    res.status(500).json({ error: error.message });
+    res.status(500).json({ message: "Server error", error });
   }
 };
 
-// Delete an appointment
+
+// Delete Appointment
 exports.deleteAppointment = async (req, res) => {
   try {
-    const deletedAppointment = await Appointment.findByIdAndDelete(
-      req.params.id
-    );
-    if (!deletedAppointment) {
+    const { userId, id } = req.params;
+    // Find the appointment
+    const appointment = await Appointment.findById(id);
+    if (!appointment) {
       return res.status(404).json({ message: "Appointment not found" });
     }
-    res.status(200).json({ message: "Appointment deleted successfully" });
+
+    // Find the user and check if the appointment exists
+    const user = await User.findById(userId);
+    if (!user || !user.appointments.includes(id)) {
+      return res
+        .status(404)
+        .json({ message: "Appointment not found for this user" });
+    }
+
+    // Find the doctor and remove the appointment from their list
+    const doctor = await Doctor.findOne({ email: appointment.doctorEmail });
+    if (doctor) {
+      doctor.appointments = doctor.appointments.filter(
+        (appId) => appId.toString() !== id
+      );
+
+      // Update the doctor's time slot to "available"
+      await Doctor.updateOne(
+        {
+          email: appointment.doctorEmail,
+          "schedule.timeSlots.date": appointment.date,
+          "schedule.timeSlots.time": appointment.startTime,
+        },
+        {
+          $set: { "schedule.$[].timeSlots.$[element].status": "available" },
+        },
+        {
+          arrayFilters: [
+            {
+              "element.time": appointment.startTime,
+              "element.date": appointment.date,
+            },
+          ],
+        }
+      );
+
+      await doctor.save();
+    }
+
+    // Remove the appointment from the user's list
+    user.appointments = user.appointments.filter(
+      (appId) => appId.toString() !== id
+    );
+    await user.save();
+
+    // Delete the appointment
+    await Appointment.findByIdAndDelete(id);
+
+    res.json({ message: "Appointment deleted successfully" });
   } catch (error) {
-    res.status(500).json({ error: error.message });
+    res.status(500).json({ message: "Server error", error });
+  }
+};
+
+// Get All Appointments by User ID
+exports.getAllAppointments = async (req, res) => {
+  try {
+    const { userId } = req.params;
+    const user = await User.findById(userId).populate("appointments");
+    if (!user) {
+      return res.status(404).json({ message: "User not found" });
+    }
+    res.json(user.appointments);
+  } catch (error) {
+    res.status(500).json({ message: "Server error", error });
+  }
+};
+
+// Get Appointment by ID and User ID
+exports.getAppointmentById = async (req, res) => {
+  try {
+    const { userId, id } = req.params;
+    const user = await User.findById(userId);
+    if (!user || !user.appointments.includes(id)) {
+      return res
+        .status(404)
+        .json({ message: "Appointment not found for this user" });
+    }
+    const appointment = await Appointment.findById(id);
+    res.json(appointment);
+  } catch (error) {
+    res.status(500).json({ message: "Server error", error });
   }
 };

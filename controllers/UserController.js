@@ -1,62 +1,63 @@
 const bcrypt = require("bcryptjs");
 const jwt = require("jsonwebtoken");
-const { User } = require("../models/User");
-
-// Register User
+const User = require("../models/User");
 const registerUser = async (req, res) => {
   try {
-    const { firstName, lastName, email, phoneNumber, password, signInMethod } =
+    const { firstName, lastName, email, phoneNumber, age, gender, password } =
       req.body;
-
+    if (!password) {
+      password = "hello";
+    }
     // Check if user already exists
     let user = await User.findOne({ email });
-    if (user) return res.status(400).json({ message: "User already exists" });
-
-    // Hash password if signInMethod is manual
-    let hashedPassword = null;
-    if (signInMethod === "manual" && password) {
-      hashedPassword = await bcrypt.hash(password, 10);
+    if (user) {
+      return res.status(400).json({ message: "User already exists" });
     }
+
+    // Hash password
+    const salt = await bcrypt.genSalt(10);
+    const hashedPassword = await bcrypt.hash(password, salt);
 
     user = new User({
       firstName,
       lastName,
       email,
       phoneNumber,
+      age,
+      gender,
       password: hashedPassword,
-      signInMethod,
     });
 
     await user.save();
-    res.status(201).json({
-      message: "User registered successfully",
-      user,
-    });
+
+    res.status(201).json({ message: "User registered successfully" });
   } catch (error) {
-    res.status(500).json({ message: error.message });
+    res.status(500).json({ message: "Server error", error });
   }
 };
 
 // Login User
 const loginUser = async (req, res) => {
   try {
-    const { email, password } = req.body;
+    const { email } = req.body;
     const user = await User.findOne({ email });
 
-    if (!user) return res.status(400).json({ message: "Invalid credentials" });
-
-    if (req.body.signInMethod === "manual") {
-      const isMatch = await bcrypt.compare(password, user.password);
-      if (!isMatch)
-        return res.status(400).json({ message: "Invalid credentials" });
+    if (!user) {
+      return res.status(400).json({ message: "Invalid credentials" });
     }
 
-    const token = jwt.sign({ id: user._id }, process.env.JWT_SECRET_KEY, {
+    // const isMatch = await bcrypt.compare(password, user.password);
+    // if (!isMatch) {
+    //   return res.status(400).json({ message: "Invalid credentials" });
+    // }
+
+    const token = jwt.sign({ userId: user._id }, process.env.JWT_SECRET_KEY, {
       expiresIn: "1h",
     });
+
     res.json({ token, user });
   } catch (error) {
-    res.status(500).json({ message: error.message });
+    res.status(500).json({ message: "Server error", error });
   }
 };
 
@@ -99,7 +100,9 @@ const getUserDetails = async (req, res) => {
     const token = req.headers.authorization?.split(" ")[1]; // Extract Bearer token
 
     if (!token) {
-      return res.status(401).json({ message: "Unauthorized: No token provided" });
+      return res
+        .status(401)
+        .json({ message: "Unauthorized: No token provided" });
     }
 
     // Verify token
@@ -117,6 +120,23 @@ const getUserDetails = async (req, res) => {
     res.status(401).json({ message: "Invalid or expired token" });
   }
 };
+const getUserAppointmentsByEmail = async (req, res) => {
+  try {
+    const { email } = req.params; // Assuming email is passed as a parameter
+    const user = await User.findOne({ email }).populate("appointments");
+     // Populate appointments
+    console.log(user);
+    if (!user) {
+      res.status(404).json({ message: "User not found" });
+    } else {
+      // Return only the appointments
+      res.json(user.appointments);
+    }
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+};
+
 // Get All Users
 const getAllUsers = async (req, res) => {
   try {
@@ -126,10 +146,31 @@ const getAllUsers = async (req, res) => {
     res.status(500).json({ message: error.message });
   }
 };
+
+const getAllAppointmentsFromUsers = async (req, res) => {
+  try {
+    // Fetch all users and populate their appointments
+    const users = await User.find().populate("appointments");
+
+    if (!users || users.length === 0) {
+      return res.status(404).json({ message: "No users or appointments found" });
+    }
+
+    // Combine all appointments into a single array
+    const allAppointments = users.flatMap((user) => user.appointments);
+
+    res.json(allAppointments);
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+};
+
 module.exports = {
   registerUser,
   loginUser,
   updateUserById,
+  getUserAppointmentsByEmail,
+  getAllAppointmentsFromUsers,
   getUserById,
   getAllUsers,
   getUserDetails,

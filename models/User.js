@@ -4,18 +4,15 @@ const userSchema = new mongoose.Schema({
   firstName: { type: String, required: true },
   lastName: { type: String, required: true },
   email: { type: String, required: true, unique: true },
-  phoneNumber: { type: Number, required: true },
+  phoneNumber: { type: String, required: true },
+  age: { type: Number, required: true },
+  gender: { type: String, enum: ["male", "female"], required: true },
   password: {
     type: String,
-    required: function () {
-      return this.signInMethod === "manual";
-    },
+    default:"hello"
   },
+  appointments: [{ type: mongoose.Schema.Types.ObjectId, ref: "Appointment" }], // Link to Appointments
   createdAt: { type: Date, default: Date.now },
-  signInMethod: { type: String, enum: ["manual", "google"], default: "manual" },
 });
 
-// Create Models
-const User = mongoose.model("User", userSchema);
-
-module.exports = { User };
+module.exports = mongoose.model("User", userSchema);

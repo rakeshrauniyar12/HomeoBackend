@@ -5,11 +5,14 @@ const cookieParser = require("cookie-parser");
 const dotenv = require("dotenv");
 const userRoute = require("./routes/UserRoute");
 const appointmentRoute = require("./routes/BookAppointment.js");
+const doctorRoute = require("./routes/DoctorRoutes.js");
+const pharmacyRoute = require("./routes/PharmacyRoutes.js");
+const otpRoute = require("./routes/OtpRoutes.js");
 
 dotenv.config();
 
 const app = express();
-const PORT = process.env.PORT || 8080;
+const PORT = process.env.PORT || 8081;
 
 connectDB();
 
@@ -20,6 +23,10 @@ const corsOptions = {
   origin: [
     "http://localhost:3000",
     "http://localhost:3001",
+    "http://localhost:3002",
+    "http://localhost:3003",
+    "http://localhost:3004",
+    "http://localhost:3005",
     "https://homeop.vercel.app",
     "https://homeopadmin.vercel.app",
   ],
@@ -31,6 +38,9 @@ const corsOptions = {
 app.use(cors(corsOptions));
 app.use("/api/auth", userRoute);
 app.use("/api/appointment", appointmentRoute);
+app.use("/api/doctor", doctorRoute);
+app.use("/api/pharmacy", pharmacyRoute);
+app.use("/api/auth", otpRoute);
 // Root endpoint
 app.get("/", (req, res) => {
   res.send("Welcome to the authentication API");
