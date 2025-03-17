@@ -29,6 +29,7 @@ const PharmacySchema = new mongoose.Schema({
   phoneNumber: { type: String, required: true },
   email: { type: String, required: true },
   orders: [OrderSchema],
+  remedies: [{ type: mongoose.Schema.Types.ObjectId, ref: "Remedies" }],
 });
 
 // Export the Pharmacy model

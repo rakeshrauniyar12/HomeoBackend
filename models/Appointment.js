@@ -27,7 +27,7 @@ const AppointmentSchema = new mongoose.Schema({
     duration: { type: String, default: "" }, // e.g., "5 Days"
     pharmacyName: { type: String, default: "" }, // e.g., "5 Days"
     instructions: { type: String }, // Additional instructions (optional)
-    showMedicine: { type: Boolean, default: "No" }, // Additional instructions (optional)
+    showMedicine: { type: String, default: "No" }, // Additional instructions (optional)
   },
   appointmentFee: { type: String, default: 100 },
   appointmentPaymentStatus: { type: String, default: "Pending" },

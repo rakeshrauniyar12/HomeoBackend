@@ -155,8 +155,10 @@ const updateDoctorSchedule = async () => {
       if (doctor.schedule.length > 0) {
         let schedule = doctor.schedule[0]; // Assuming single schedule per doctor
 
-        if (schedule.endDate === todayDate) {
-          console.log(`Doctor ${doctor.name}'s schedule will expire soon.`);
+        // Check if the schedule has expired
+        if (moment(schedule.endDate, "DD-MM-YYYY").isBefore(moment(todayDate, "DD-MM-YYYY"))) {
+          console.log(`Deleting expired schedule for Doctor ${doctor.name}`);
+          doctor.schedule = []; // Remove the schedule
         } else {
           // Remove all time slots from the previous day
           schedule.timeSlots = schedule.timeSlots.filter(
@@ -165,15 +167,16 @@ const updateDoctorSchedule = async () => {
 
           // Update the startDate to today
           schedule.startDate = todayDate;
-
-          await doctor.save();
         }
+
+        await doctor.save();
       }
     }
   } catch (error) {
     console.error("Error updating doctor schedules:", error);
   }
 };
+
 /**
  * Delete a doctor by ID
  */
@@ -221,23 +224,8 @@ const getAllDoctors = async (req, res) => {
   }
 };
 
-/**
- * Get time slots for a doctor by email
- */
-// const getTimeSlot = async (req, res) => {
-//   try {
-//     const { email } = req.params;
-//     const doctor = await Doctor.findOne({ email });
-//     if (!doctor) return res.status(404).json({ message: "Doctor not found" });
-//     res
-//       .status(200)
-//       .json({ doctorEmail: email, schedule: doctor.schedule || [] });
-//   } catch (error) {
-//     res
-//       .status(500)
-//       .json({ message: "Error fetching time slots", error: error.message });
-//   }
-// };
+
+
 const getTimeSlot = async (req, res) => {
   try {
     const { email, date } = req.params; // Incoming format: yyyy-mm-dd
