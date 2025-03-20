@@ -78,6 +78,7 @@ exports.addAppointment = async (req, res) => {
         phoneNumber,
         age,
         gender,
+        doctorEmail,
         password,
       });
       await user.save();
@@ -91,7 +92,7 @@ exports.addAppointment = async (req, res) => {
       phoneNumber,
       location,
       consultationType,
-      doctorEmail,
+      doctorEmail:doctor.name,
       date: formattedDate,
       startTime,
       medicines,
@@ -100,6 +101,7 @@ exports.addAppointment = async (req, res) => {
 
     // Link appointment to user
     user.appointments.push(appointment._id);
+    user.doctorEmail=doctorEmail;
     await user.save();
 
     // Link appointment to doctor
@@ -122,10 +124,12 @@ exports.addAppointment = async (req, res) => {
         ],
       }
     );
-
+    const sortedAppointments = await Appointment.find()
+    .sort({ date: -1 }) // Sorting by date in descending order
+    .exec();
     res
       .status(201)
-      .json({ message: "Appointment booked successfully", appointment });
+      .json({ message: "Appointment booked successfully", sortedAppointments });
   } catch (error) {
     res.status(500).json({ message: "Server error", error });
   }
@@ -147,7 +151,10 @@ exports.updateAppointment = async (req, res) => {
       req.body,
       { new: true }
     );
-    res.json(updatedAppointment);
+    const sortedAppointments = await Appointment.find()
+    .sort({ date: -1 }) // Sorting by date in descending order
+    .exec();
+    res.json(sortedAppointments);
   } catch (error) {
     res.status(500).json({ message: "Server error", error });
   }
@@ -174,8 +181,10 @@ exports.addMedicineToAppointment = async (req, res) => {
     if (!updatedAppointment) {
       return res.status(404).json({ message: "Appointment not found" });
     }
-
-    res.json(updatedAppointment);
+    const sortedAppointments = await Appointment.find()
+    .sort({ date: -1 }) // Sorting by date in descending order
+    .exec();
+    res.json(sortedAppointments);
   } catch (error) {
     res.status(500).json({ message: "Server error", error });
   }
@@ -253,7 +262,10 @@ exports.getAllAppointments = async (req, res) => {
     if (!user) {
       return res.status(404).json({ message: "User not found" });
     }
-    res.json(user.appointments);
+    const sortedAppointments = await user.appointments
+    .sort({ date: -1 }) // Sorting by date in descending order
+    .exec();
+    res.json(sortedAppointments);
   } catch (error) {
     res.status(500).json({ message: "Server error", error });
   }

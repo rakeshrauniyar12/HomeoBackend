@@ -6,7 +6,7 @@ const registerUser = async (req, res) => {
     const { firstName, lastName, email, phoneNumber, age, gender, password } =
       req.body;
     if (!password) {
-      password = "hello";
+      password = "12345";
     }
     // Check if user already exists
     let user = await User.findOne({ email });
@@ -30,7 +30,7 @@ const registerUser = async (req, res) => {
 
     await user.save();
 
-    res.status(201).json({ message: "User registered successfully" });
+    res.status(201).json({ message: "User registered successfully", user });
   } catch (error) {
     res.status(500).json({ message: "Server error", error });
   }
@@ -39,17 +39,17 @@ const registerUser = async (req, res) => {
 // Login User
 const loginUser = async (req, res) => {
   try {
-    const { email } = req.body;
+    const { email,password } = req.body;
     const user = await User.findOne({ email });
 
     if (!user) {
       return res.status(400).json({ message: "Invalid credentials" });
     }
 
-    // const isMatch = await bcrypt.compare(password, user.password);
-    // if (!isMatch) {
-    //   return res.status(400).json({ message: "Invalid credentials" });
-    // }
+    const isMatch = await bcrypt.compare(password, user.password);
+    if (!isMatch) {
+      return res.status(400).json({ message: "Invalid credentials" });
+    }
 
     const token = jwt.sign({ userId: user._id }, process.env.JWT_SECRET_KEY, {
       expiresIn: "1h",
@@ -94,6 +94,31 @@ const getUserById = async (req, res) => {
   }
 };
 
+const getAllUsersByDoctorEmail = async (req, res) => {
+  try {
+    const { doctoremail } = req.params; // Get doctorEmail from request parameters
+
+    if (!doctoremail) {
+      return res.status(400).json({ message: "Doctor email is required" });
+    }
+
+    // Find all users that have the given doctorEmail
+    const users = await User.find({ doctorEmail: doctoremail }).populate(
+      "appointments"
+    );
+
+    if (users.length === 0) {
+      return res
+        .status(404)
+        .json({ message: "No users found for this doctor" });
+    }
+
+    res.status(200).json(users);
+  } catch (error) {
+    res.status(500).json({ message: "Server error", error: error.message });
+  }
+};
+
 const getUserDetails = async (req, res) => {
   try {
     // Get the token from headers
@@ -124,7 +149,7 @@ const getUserAppointmentsByEmail = async (req, res) => {
   try {
     const { email } = req.params; // Assuming email is passed as a parameter
     const user = await User.findOne({ email }).populate("appointments");
-     // Populate appointments
+    // Populate appointments
     console.log(user);
     if (!user) {
       res.status(404).json({ message: "User not found" });
@@ -153,7 +178,9 @@ const getAllAppointmentsFromUsers = async (req, res) => {
     const users = await User.find().populate("appointments");
 
     if (!users || users.length === 0) {
-      return res.status(404).json({ message: "No users or appointments found" });
+      return res
+        .status(404)
+        .json({ message: "No users or appointments found" });
     }
 
     // Combine all appointments into a single array
@@ -165,6 +192,29 @@ const getAllAppointmentsFromUsers = async (req, res) => {
   }
 };
 
+const forgotPassword = async (req, res) => {
+  const { email, password } = req.body;
+  try {
+    // Check if user exists
+    const user = await User.findOne({ email });
+
+    if (!user) {
+      return res.status(404).json({ message: "User not found" });
+    }
+
+    // Hash the new password
+    const salt = await bcrypt.genSalt(10);
+    user.password = await bcrypt.hash(password, salt);
+
+    // Save updated user
+    await user.save();
+
+    res.json({ message: "Password updated successfully" });
+  } catch (error) {
+    res.status(500).json({ message: "Server error", error });
+  }
+};
+
 module.exports = {
   registerUser,
   loginUser,
@@ -172,6 +222,8 @@ module.exports = {
   getUserAppointmentsByEmail,
   getAllAppointmentsFromUsers,
   getUserById,
+  forgotPassword,
+  getAllUsersByDoctorEmail,
   getAllUsers,
   getUserDetails,
 };

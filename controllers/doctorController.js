@@ -1,12 +1,14 @@
 const Doctor = require("../models/Doctor.js");
+const Appointment = require("../models/Appointment.js");
 const moment = require("moment");
-/**
- * Add a new doctor with an optional schedule
- */
+const bcrypt = require("bcryptjs");
+const jwt = require("jsonwebtoken");
 const addDoctor = async (req, res) => {
   try {
-    const { name, email, phone, specialization, schedule } = req.body;
-
+    const { name, email, phone, specialization, schedule, password } = req.body;
+    if (!password) {
+      password = "12345";
+    }
     // Check if doctor already exists
     const existingDoctor = await Doctor.findOne({ email });
     if (existingDoctor)
@@ -27,12 +29,14 @@ const addDoctor = async (req, res) => {
         })
       );
     }
-
+    const salt = await bcrypt.genSalt(10);
+    const hashedPassword = await bcrypt.hash(password, salt);
     const doctor = new Doctor({
       name,
       email,
       phone,
       specialization,
+      password: hashedPassword,
       schedule: formattedSchedule,
     });
 
@@ -150,13 +154,24 @@ const updateDoctorSchedule = async () => {
     const todayDate = moment().format("DD-MM-YYYY");
     const yesterdayDate = moment().subtract(1, "day").format("DD-MM-YYYY");
     const doctors = await Doctor.find(); // Fetch all doctors
+    const appointments = await Appointment.find({ date: yesterdayDate });
 
+    for (let appointment of appointments) {
+      if (appointment.appointmentStatus === "Booked") {
+        appointment.appointmentStatus = "Expired";
+        await appointment.save();
+      }
+    }
     for (let doctor of doctors) {
       if (doctor.schedule.length > 0) {
         let schedule = doctor.schedule[0]; // Assuming single schedule per doctor
 
         // Check if the schedule has expired
-        if (moment(schedule.endDate, "DD-MM-YYYY").isBefore(moment(todayDate, "DD-MM-YYYY"))) {
+        if (
+          moment(schedule.endDate, "DD-MM-YYYY").isBefore(
+            moment(todayDate, "DD-MM-YYYY")
+          )
+        ) {
           console.log(`Deleting expired schedule for Doctor ${doctor.name}`);
           doctor.schedule = []; // Remove the schedule
         } else {
@@ -194,19 +209,62 @@ const deleteDoctor = async (req, res) => {
   }
 };
 
+const getDoctorByToken = async (req, res) => {
+  try {
+    const token = req.headers.authorization?.split(" ")[1]; // Get token from request headers
+
+    if (!token) return res.status(401).json({ message: "No token provided" });
+
+    // Verify the token and extract the doctor ID
+    const decoded = jwt.verify(token, process.env.JWT_SECRET_KEY);
+    const doctorId = decoded.doctorId;
+    // Fetch doctor details (excluding password)
+    const doctor = await Doctor.findById(doctorId)
+      .select("-password")
+      .populate("appointments");
+
+    if (!doctor) return res.status(404).json({ message: "Doctor not found" });
+
+    res.status(200).json({ doctor });
+  } catch (error) {
+    res
+      .status(401)
+      .json({ message: "Invalid or expired token", error: error.message });
+  }
+};
 /**
  * Get a doctor by email
  */
 const getDoctorByEmail = async (req, res) => {
   try {
-    const { email } = req.params;
-    const doctor = await Doctor.findOne({ email }).populate("appointments");
-    if (!doctor) return res.status(404).json({ message: "Doctor not found" });
-    res.status(200).json(doctor);
+    const { email, password } = req.body;
+    console.log(email, password);
+    // Find doctor by email
+    const doctorWithPassword = await Doctor.findOne({ email }).populate(
+      "appointments"
+    );
+    if (!doctorWithPassword)
+      return res.status(404).json({ message: "Doctor not found" });
+
+    // Compare password
+    const isMatch = await bcrypt.compare(password, doctorWithPassword.password);
+    if (!isMatch)
+      return res.status(401).json({ message: "Invalid credentials" });
+
+    // Generate token
+    const token = jwt.sign(
+      { doctorId: doctorWithPassword._id },
+      process.env.JWT_SECRET_KEY,
+      {
+        expiresIn: "1d", // Token expires in 1 day
+      }
+    );
+    const doctor = await Doctor.findOne({ email })
+      .select("-password")
+      .populate("appointments");
+    res.status(200).json({ token, doctor });
   } catch (error) {
-    res
-      .status(500)
-      .json({ message: "Error fetching doctor", error: error.message });
+    res.status(500).json({ message: "Error logging in", error: error.message });
   }
 };
 
@@ -223,8 +281,6 @@ const getAllDoctors = async (req, res) => {
       .json({ message: "Error fetching doctors", error: error.message });
   }
 };
-
-
 
 const getTimeSlot = async (req, res) => {
   try {
@@ -307,5 +363,6 @@ module.exports = {
   getAllDoctors,
   getTimeSlot,
   updateDoctorSchedule,
+  getDoctorByToken,
   getAllAppointmentsByDoctorEmail,
 };

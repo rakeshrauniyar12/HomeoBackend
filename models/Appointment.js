@@ -25,6 +25,7 @@ const AppointmentSchema = new mongoose.Schema({
     potency: { type: String, default: "" }, // Dosage (e.g., 500mg)
     frequency: { type: String, default: "" }, // e.g., "Twice a Day"
     duration: { type: String, default: "" }, // e.g., "5 Days"
+    nightDuration: { type: String, default: "" }, // e.g., "5 Days"
     pharmacyName: { type: String, default: "" }, // e.g., "5 Days"
     instructions: { type: String }, // Additional instructions (optional)
     showMedicine: { type: String, default: "No" }, // Additional instructions (optional)

@@ -7,9 +7,9 @@ const userSchema = new mongoose.Schema({
   phoneNumber: { type: String, required: true },
   age: { type: Number, required: true },
   gender: { type: String, enum: ["male", "female"], required: true },
+  doctorEmail:{ type: String, default:"" },
   password: {
     type: String,
-    default:"hello"
   },
   appointments: [{ type: mongoose.Schema.Types.ObjectId, ref: "Appointment" }], // Link to Appointments
   createdAt: { type: Date, default: Date.now },
