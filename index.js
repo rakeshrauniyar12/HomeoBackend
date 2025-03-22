@@ -34,6 +34,7 @@ const corsOptions = {
     "http://localhost:3004",
     "http://localhost:3005",
     "https://homeop.vercel.app",
+    "https://drrkvishwakarma.com",
     "https://homeopadmin.vercel.app",
   ],
   methods: ["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"], // Fixed 'methods'
