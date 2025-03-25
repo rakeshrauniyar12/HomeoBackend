@@ -30,8 +30,9 @@ const AppointmentSchema = new mongoose.Schema({
     instructions: { type: String }, // Additional instructions (optional)
     showMedicine: { type: String, default: "No" }, // Additional instructions (optional)
   },
-  appointmentFee: { type: String, default: 100 },
+  appointmentFee: { type: String, default: 1 },
   appointmentPaymentStatus: { type: String, default: "Pending" },
+  appojntmentPaymentId: { type: String },
   appointmentStatus: { type: String, default: "Booked" },
   createdAt: { type: Date, default: Date.now },
 });
