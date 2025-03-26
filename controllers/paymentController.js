@@ -2,86 +2,6 @@ const axios = require("axios");
 const crypto = require("crypto");
 const User = require("../models/User");
 
-import { randomUUID } from 'crypto';
-import { OrderStatusResponse } from 'pg-sdk-node';
-
-const clientId = "SU2503241524196716164701";
-const clientSecret = "684b82cb-e69b-4c64-951a-dcf099009a13";
-const clientVersion = 1;  //insert your client version here
-const env = Env.SANDBOX;      //change to Env.PRODUCTION when you go live
- 
-const client = StandardCheckoutClient.getInstance(clientId, clientSecret, clientVersion, env);
-
-
-  
-const merchantOrderId = randomUUID();
-const amount = 100;
-const redirectUrl = "http://localhost:3000";
-  
-const request = StandardCheckoutPayRequest.builder()
-        .merchantOrderId(merchantOrderId)
-        .amount(amount)
-        .redirectUrl(redirectUrl)
-        .build();
-  
-client.pay(request).then((response)=> {
-    const checkoutPageUrl = response.redirectUrl;
-    console.log(checkoutPageUrl);
-})
-
-
- 
-// const merchantOrderId = '<merchantOrderId>'; //created at the time of order creation
- 
-client.getOrderStatus(merchantOrderId).then((response) => {
-  const state = response.state;
-});
-
-
-const authorizationHeaderData = "ef4c914c591698b268db3c64163eafda7209a630f236ebf0eebf045460df723a" // received in the response headers
-const phonepeS2SCallbackResponseBodyString = "{\"type\": \"PG_ORDER_COMPLETED\",\"payload\": {}}"  // callback body as string
-  
-const usernameConfigured = "<MERCHANT_USERNAME>"
-const passwordConfigured = "<MERCHANT_PASSWORD>" 
- 
-const callbackResponse = client.validateCallback(
-    usernameConfigured,
-    passwordConfigured,
-    authorizationHeaderData,
-    phonepeS2SCallbackResponseBodyString );
- 
-const orderId = callbackResponse.payload.orderId;
-const state = callbackResponse.payload.state;
-
- 
-const request1 = CreateSdkOrderRequest.StandardCheckoutBuilder()
-        .merchantOrderId(merchantOrderId)
-        .amount(amount)
-        .redirectUrl(redirectUrl)
-        .build();
- 
-client.createSdkOrder(request1).then((response) => {
-    const token = response.token
-})
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 exports.phonePePaymentStatus = async (req, res) => {
   const { txnId } = req.params;
   const merchantId = process.env.PHONEPE_MERCHANT_ID;
@@ -94,7 +14,7 @@ exports.phonePePaymentStatus = async (req, res) => {
 
   const options = {
     method: "GET",
-    url:`https://api.phonepe.com/apis/hermes/pg/v1/status/${merchantId}/${txnId}`,
+    url: `https://api.phonepe.com/apis/hermes/pg/v1/status/${merchantId}/${txnId}`,
     headers: {
       accept: "application/json",
       "Content-Type": "application/json",
@@ -107,10 +27,12 @@ exports.phonePePaymentStatus = async (req, res) => {
     .request(options)
     .then(async (response) => {
       if (response.data.success === true) {
-        const url = "http://localhost:3000/payment-success";
+        const url = "http://localhost:3000";
+        // const url = "https://lifesignify.com/payment-success";
         return res.redirect(url);
       } else {
-        const url = "http://localhost:3000/payment-failure";
+        const url = "http://localhost:3000/ourtreatment";
+        // const url = "https://lifesignify.com/payment-failure";
         return res.redirect(url);
       }
     })
@@ -121,36 +43,34 @@ exports.phonePePaymentStatus = async (req, res) => {
 
 exports.phonePePayment = async (req, res) => {
   try {
-    const { formData, products, userId } = req.body;
+    const { amount } = req.body;
 
     const merchantId = process.env.PHONEPE_MERCHANT_ID;
     const saltKey = process.env.PHONEPE_SALT_KEY;
 
     const transactionId = `TXN_${Date.now()}`;
-    const merchantUserId = `MUID${userId}${Date.now()}`;
+    const merchantUserId = `MUID${"ahhdkkjd"}${Date.now()}`;
 
-    const totalAmount = products.reduce(
-      (total, product) =>
-        total +
-        parseFloat(product.price.replace("₹", "").replace(",", "").trim()) *
-          100,
-      0
-    );
+    // const totalAmount = products.reduce(
+    //   (total, product) =>
+    //     total +
+    //     parseFloat(product.price.replace("₹", "").replace(",", "").trim()) *
+    //       100,
+    //   0
+    // );
 
     const requestBody = {
       merchantId: merchantId,
       merchantTransactionId: transactionId,
       merchantUserId: merchantUserId,
-      amount: totalAmount,
+      amount: amount,
       redirectUrl: `http://localhost:8081/api/payment/status/${transactionId}`,
-    //   redirectUrl: `https://lifesignify-backend.onrender.com/api/payment/status/${transactionId}`,
       redirectMode: "POST",
-      mobileNumber: formData.mobilenumber,
       paymentInstrument: {
         type: "PAY_PAGE",
       },
     };
-
+   console.log("Request Body",requestBody)
     const payload = JSON.stringify(requestBody);
     const payloadMain = Buffer.from(payload).toString("base64");
     const keyIndex = 1;
@@ -183,6 +103,7 @@ exports.phonePePayment = async (req, res) => {
       console.log("error", error);
       res.status(500).json({ error: "failed to initiate payment" });
     }
+
   } catch (error) {
     console.error("Error processing payment:", error);
     res.status(500).json({ message: "Server error" });
