@@ -33,6 +33,7 @@ const AppointmentSchema = new mongoose.Schema({
   appointmentFee: { type: String, default: 1 },
   appointmentPaymentStatus: { type: String, default: "Pending" },
   appojntmentPaymentId: { type: String },
+  appojntmentPaymentMode: { type: String,default:"upi" },
   appointmentStatus: { type: String, default: "Booked" },
   createdAt: { type: Date, default: Date.now },
 });
