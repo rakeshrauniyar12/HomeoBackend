@@ -102,13 +102,15 @@ app.get("/check-status",async (req,res)=>{
         }
         const response = await client.getOrderStatus(merchantOrderId);
         console.log(response)
+        let url="https://drrkvishwakarma.com"
+        // let url="http://localhost:3000"
         if (response.state === "COMPLETED") {
           const transactionId = response.paymentDetails[0].transactionId;
           const paymentMode = response.paymentDetails[0].paymentMode;
-          return res.redirect(`http://localhost:3000/paymentsuccess?status=success&transactionId=${transactionId}&mode=${paymentMode}`);;  // Send the URL to redirect to
+          return res.redirect(`${url}/paymentsuccess?status=success&transactionId=${transactionId}&mode=${paymentMode}`);;  // Send the URL to redirect to
           // return res.json({ redirectUrl: "http://localhost:3000" });;  // Send the URL to redirect to
         } else {
-          return res.redirect(`http://localhost:3000/paymentfail?status=fail`);  // Send a different URL if not completed
+          return res.redirect(`${url}/paymentfail?status=fail`);  // Send a different URL if not completed
         }
          
      } catch (error) {
