@@ -73,7 +73,8 @@ app.post("/create-order", async (req, res) => {
       res.status(500).send("Amount is required.");
     }
     const merchantId = randomUUID();
-    const redirectUrl = `http://localhost:8081/check-status?merchantOrderId=${merchantId}`;
+    // const redirectUrl = `http://localhost:8081/check-status?merchantOrderId=${merchantId}`;
+    const redirectUrl = `https://homeobackend.onrender.com/check-status?merchantOrderId=${merchantId}`;
     // const redirectUrl = `http://localhost:3000`;
     const request = StandardCheckoutPayRequest.builder()
       .merchantOrderId(merchantId)
