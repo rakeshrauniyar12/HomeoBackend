@@ -4,5 +4,6 @@ const superAdminController = require("../controllers/superAdminController");
 
 router.post("/register", superAdminController.register);
 router.post("/login", superAdminController.login);
+router.get("/get", superAdminController.getUserDetails);
 
 module.exports = router;

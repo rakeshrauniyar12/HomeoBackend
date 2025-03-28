@@ -61,38 +61,50 @@ exports.updatePharmacyFields = async (req, res) => {
 exports.addOrderToPharmacy = async (req, res) => {
   try {
     const { id } = req.params;
-    const { patientName, doctorEmail, medicine} = req.body;
+    const { patientName, doctorEmail, medicine } = req.body;
 
-    // Validate paymentMethod
-    // if (!['Cash', 'Credit Card', 'Online'].includes(paymentMethod)) {
-    //   return res.status(400).json({ message: 'Invalid payment method' });
-    // }
-
+    // Validate pharmacy existence
     const pharmacy = await Pharmacy.findById(id);
-
     if (!pharmacy) {
-      return res.status(404).json({ message: 'Pharmacy not found' });
+      return res.status(404).json({ message: "Pharmacy not found" });
     }
 
-    // Create a new order
+    // ✅ Create properly structured medicine object
+    const formattedMedicine = {
+      complain: medicine.complain || "No complaint specified",
+      remedies: (Array.isArray(medicine?.remedies) 
+        ? medicine.remedies.map(rem => ({
+            medicineName: rem.medicineName?.trim() || "Unknown",
+            dosage: rem.dosage?.trim() || "N/A",
+            frequency: rem.frequency?.trim() || "N/A"
+          }))
+        : []),
+      potency: medicine.potency || "medium", // default to medium if not specified
+      duration: medicine.duration || "1" // default to 1 day
+    };
+
+    // ✅ Create new order with complete structure
     const newOrder = {
       patientName,
       doctorEmail,
-      medicine,
+      medicine: formattedMedicine,
+      paymentMethod: "Select Payment Method" // Default as per schema
     };
 
-    // Push the new order into the orders array
+    // Push new order into pharmacy's orders array
     pharmacy.orders.push(newOrder);
 
-    // Save the updated pharmacy
+    // Save updated pharmacy
     const updatedPharmacy = await pharmacy.save();
 
     res.json(updatedPharmacy);
   } catch (error) {
-    console.error(error);
-    res.status(500).json({ message: 'Failed to add order to pharmacy' });
+    console.error("Error adding order:", error);
+    res.status(500).json({ message: "Failed to add order to pharmacy" });
   }
 };
+
+
 // Get pharmacy by email
 exports.getPharmacyByEmail = async (req, res) => {
   try {

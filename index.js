@@ -5,6 +5,7 @@ const cookieParser = require("cookie-parser");
 const dotenv = require("dotenv");
 const bodyParser = require("body-parser");
 const { randomUUID } = require("crypto");
+const Appointment = require("./models/Appointment.js");
 const axios = require("axios");
 const {
   StandardCheckoutClient,
@@ -65,58 +66,67 @@ const client = StandardCheckoutClient.getInstance(
   env
 );
 
-app.post("/create-order", async (req, res) => {
+app.post("/api/create-order", async (req, res) => {
   try {
     const { amount } = req.body;
-    console.log("Amount",amount)
+    console.log("Amount", amount);
     if (!amount) {
       res.status(500).send("Amount is required.");
     }
     const merchantId = randomUUID();
     // const redirectUrl = `http://localhost:8081/check-status?merchantOrderId=${merchantId}`;
-    const redirectUrl = `https://homeobackend.onrender.com/check-status?merchantOrderId=${merchantId}`;
+    const redirectUrl = `https://api.drrkvishwakarma.com/check-status?merchantOrderId=${merchantId}`;
     // const redirectUrl = `http://localhost:3000`;
     const request = StandardCheckoutPayRequest.builder()
       .merchantOrderId(merchantId)
       .amount(amount)
       .redirectUrl(redirectUrl)
       .build();
-     client.pay(request).then((response)=> {
-        res.json({
-          checkoutPageUrl: response.redirectUrl,
-          merchantOrderId: merchantId,
-        });
+    client.pay(request).then((response) => {
+      res.json({
+        checkoutPageUrl: response.redirectUrl,
+        merchantOrderId: merchantId,
+      });
     });
   } catch (error) {
     console.log("Error", error);
   }
 });
 
+app.get("/check-status", async (req, res) => {
+  try {
+    const { merchantOrderId } = req.query;
+    if (!merchantOrderId) {
+      return res.status(400).send("Merchant Id is required.");
+    }
+    const response = await client.getOrderStatus(merchantOrderId);
+    console.log(response);
+    let url = "https://drrkvishwakarma.com";
+    // let url="http://localhost:3000"
+    if (response.state === "COMPLETED") {
+      const transactionId = response.paymentDetails[0].transactionId;
+      const paymentMode = response.paymentDetails[0].paymentMode;
+      // const appointment = await Appointment.findById(merchantOrderId);
+      // if (appointment) {
+        // appointment.appointmentPaymentStatus = "Success";
+        // appointment.appojntmentPaymentId = transactionId;
+        // appointment.appojntmentPaymentMode = paymentMode;
 
-app.get("/check-status",async (req,res)=>{
-     try {
-        const {merchantOrderId} = req.query;
-        if(!merchantOrderId){
-          return res.status(400).send("Merchant Id is required.")
+        // appointment.save();
+        return res.redirect(
+          `${url}/paymentsuccess?status=success`
+        ); // Send the URL to redirect to
+      // }
+      // return res.json({ redirectUrl: "http://localhost:3000" });;  // Send the URL to redirect to
+    } else {
+      // const appointment = await Appointment.findByIdAndDelete(merchantOrderId);
 
-        }
-        const response = await client.getOrderStatus(merchantOrderId);
-        console.log(response)
-        let url="https://drrkvishwakarma.com"
-        // let url="http://localhost:3000"
-        if (response.state === "COMPLETED") {
-          const transactionId = response.paymentDetails[0].transactionId;
-          const paymentMode = response.paymentDetails[0].paymentMode;
-          return res.redirect(`${url}/paymentsuccess?status=success&transactionId=${transactionId}&mode=${paymentMode}`);;  // Send the URL to redirect to
-          // return res.json({ redirectUrl: "http://localhost:3000" });;  // Send the URL to redirect to
-        } else {
-          return res.redirect(`${url}/paymentfail?status=fail`);  // Send a different URL if not completed
-        }
-         
-     } catch (error) {
-       console.log("Error",error);
-     }
-})
+      return res.redirect(`${url}/paymentfail?status=fail`); // Send a different URL if not completed
+    }
+  } catch (error) {
+    console.log("Error", error);
+  }
+});
 // Routes
 
 app.use("/api/auth", userRoute);

@@ -3,6 +3,156 @@ const User = require("../models/User");
 const Doctor = require("../models/Doctor");
 const moment = require("moment"); // Install moment.js for
 
+// exports.addAppointment = async (req, res) => {
+//   try {
+//     const {
+//       firstName,
+//       lastName,
+//       email,
+//       phoneNumber,
+//       location,
+//       consultationType,
+//       doctorEmail,
+//       date, // Expected format: "YYYY-MM-DD" from frontend
+//       startTime,
+//       medicines,
+//       age,
+//       gender,
+//       password,
+//     } = req.body;
+
+//     // Convert input date to match database format (DD-MM-YYYY)
+//     const formattedDate = moment(date, "YYYY-MM-DD").format("DD-MM-YYYY");
+
+//     // Check if doctor exists
+//     const doctor = await Doctor.findOne({ email: doctorEmail });
+//     if (!doctor) {
+//       return res.status(404).json({ message: "Doctor not found" });
+//     }
+
+//     // Check if doctor has schedule for the specified date
+//     const scheduleForDate = doctor.schedule.find((schedule) => {
+//       const startDate = moment(schedule.startDate, "DD-MM-YYYY");
+//       const endDate = moment(schedule.endDate, "DD-MM-YYYY");
+//       const appointmentDate = moment(formattedDate, "DD-MM-YYYY");
+//       return appointmentDate.isBetween(startDate, endDate, null, "[]");
+//     });
+
+//     if (!scheduleForDate) {
+//       return res
+//         .status(400)
+//         .json({ message: "Doctor does not have a schedule for this date" });
+//     }
+
+//     // Find the specific time slot for the given date
+//     const timeSlot = scheduleForDate.timeSlots.find(
+//       (slot) => slot.date === formattedDate && slot.time === startTime
+//     );
+
+//     if (!timeSlot || timeSlot.status !== "available") {
+//       return res
+//         .status(400)
+//         .json({ message: "This time slot is either booked or unavailable" });
+//     }
+
+//     // Check if the appointment slot is already booked
+//     const existingAppointment = await Appointment.findOne({
+//       doctorEmail,
+//       date: formattedDate,
+//       startTime,
+//     });
+
+//     if (existingAppointment) {
+//       return res.status(400).json({
+//         message: "This time slot is already booked with this doctor.",
+//       });
+//     }
+
+//     // Check if user exists, otherwise create new user
+//     let user = await User.findOne({ email });
+//     if (!user) {
+//       user = new User({
+//         firstName,
+//         lastName,
+//         email,
+//         phoneNumber,
+//         age,
+//         gender,
+//         doctorEmail,
+//         password,
+//       });
+//       await user.save();
+//     }
+
+//     // Create new appointment
+//     const appointment = new Appointment({
+//       firstName,
+//       lastName,
+//       email,
+//       phoneNumber,
+//       location,
+//       consultationType,
+//       doctorEmail:doctor.name,
+//       date: formattedDate,
+//       startTime,
+//       medicines,
+//     });
+//     await appointment.save();
+
+//     // Link appointment to user
+//     user.appointments.push(appointment._id);
+//     user.doctorEmail=doctorEmail;
+//     await user.save();
+
+//     // Link appointment to doctor
+//     doctor.appointments.push(appointment._id);
+//     await doctor.save();
+
+//     // **Fix: Update only the matching time slot for the correct date**
+//     await Doctor.updateOne(
+//       {
+//         email: doctorEmail,
+//         "schedule.timeSlots.date": formattedDate, // Match DD-MM-YYYY format
+//         "schedule.timeSlots.time": startTime,
+//       },
+//       {
+//         $set: { "schedule.$[].timeSlots.$[element].status": "booked" },
+//       },
+//       {
+//         arrayFilters: [
+//           { "element.time": startTime, "element.date": formattedDate }, // Ensure both date and time match
+//         ],
+//       }
+//     );
+//     // const sortedAppointments = await Appointment.find()
+//     // .sort({ date: -1 }) // Sorting by date in descending order
+//     // .exec();
+//     res
+//       .status(201)
+//       .json({ message: "Appointment booked successfully", appointment: {
+//         _id: appointment._id, // Include the appointment ID
+//         firstName: appointment.firstName,
+//         lastName: appointment.lastName,
+//         email: appointment.email,
+//         phoneNumber: appointment.phoneNumber,
+//         location: appointment.location,
+//         consultationType: appointment.consultationType,
+//         doctorEmail: appointment.doctorEmail,
+//         date: appointment.date,
+//         startTime: appointment.startTime,
+//         medicines: appointment.medicines,
+//       }, });
+//   } catch (error) {
+//     res.status(500).json({ message: "Server error", error });
+//   }
+// };
+// const moment = require("moment");
+// const Appointment = require("../models/Appointment");
+// const Doctor = require("../models/Doctor");
+// const User = require("../models/User");
+
+
+
 exports.addAppointment = async (req, res) => {
   try {
     const {
@@ -13,21 +163,33 @@ exports.addAppointment = async (req, res) => {
       location,
       consultationType,
       doctorEmail,
-      date, // Expected format: "YYYY-MM-DD" from frontend
+      date,
       startTime,
-      medicines,
       age,
       gender,
+      medicines,
       password,
     } = req.body;
 
-    // Convert input date to match database format (DD-MM-YYYY)
+    console.log("Received Appointment Request:", req.body);
+
+    const userPassword = password || "12345";
+
+    // Convert date format to match database (DD-MM-YYYY)
+    if (!date) {
+      return res.status(400).json({ message: "Date is required." });
+    }
     const formattedDate = moment(date, "YYYY-MM-DD").format("DD-MM-YYYY");
 
     // Check if doctor exists
     const doctor = await Doctor.findOne({ email: doctorEmail });
     if (!doctor) {
       return res.status(404).json({ message: "Doctor not found" });
+    }
+
+    // Ensure doctor has a schedule
+    if (!doctor.schedule || doctor.schedule.length === 0) {
+      return res.status(400).json({ message: "Doctor has no schedule available." });
     }
 
     // Check if doctor has schedule for the specified date
@@ -39,20 +201,21 @@ exports.addAppointment = async (req, res) => {
     });
 
     if (!scheduleForDate) {
-      return res
-        .status(400)
-        .json({ message: "Doctor does not have a schedule for this date" });
+      return res.status(400).json({ message: "Doctor does not have a schedule for this date." });
     }
 
-    // Find the specific time slot for the given date
+    // Ensure timeSlots exist
+    if (!scheduleForDate.timeSlots || scheduleForDate.timeSlots.length === 0) {
+      return res.status(400).json({ message: "No available time slots for this date." });
+    }
+
+    // Find the specific time slot
     const timeSlot = scheduleForDate.timeSlots.find(
       (slot) => slot.date === formattedDate && slot.time === startTime
     );
 
     if (!timeSlot || timeSlot.status !== "available") {
-      return res
-        .status(400)
-        .json({ message: "This time slot is either booked or unavailable" });
+      return res.status(400).json({ message: "This time slot is either booked or unavailable." });
     }
 
     // Check if the appointment slot is already booked
@@ -63,9 +226,7 @@ exports.addAppointment = async (req, res) => {
     });
 
     if (existingAppointment) {
-      return res.status(400).json({
-        message: "This time slot is already booked with this doctor.",
-      });
+      return res.status(400).json({ message: "This time slot is already booked with this doctor." });
     }
 
     // Check if user exists, otherwise create new user
@@ -79,10 +240,20 @@ exports.addAppointment = async (req, res) => {
         age,
         gender,
         doctorEmail,
-        password,
+        password: userPassword,
       });
       await user.save();
     }
+
+    const formattedMedicines = medicines || {
+      complain: "No complaints",
+      remedies: [],
+      potency: "Medium",
+      duration: "3 Days",
+      pharmacyName: "Generic Pharmacy",
+      instructions: "Take with water",
+      showMedicine: "No",
+    };
 
     // Create new appointment
     const appointment = new Appointment({
@@ -92,16 +263,17 @@ exports.addAppointment = async (req, res) => {
       phoneNumber,
       location,
       consultationType,
-      doctorEmail:doctor.name,
+      doctorEmail,
       date: formattedDate,
       startTime,
-      medicines,
+      medicines: formattedMedicines,
     });
+
     await appointment.save();
 
     // Link appointment to user
     user.appointments.push(appointment._id);
-    user.doctorEmail=doctorEmail;
+    user.doctorEmail = doctorEmail;
     await user.save();
 
     // Link appointment to doctor
@@ -110,28 +282,22 @@ exports.addAppointment = async (req, res) => {
 
     // **Fix: Update only the matching time slot for the correct date**
     await Doctor.updateOne(
+      { email: doctorEmail, "schedule.timeSlots.date": formattedDate },
       {
-        email: doctorEmail,
-        "schedule.timeSlots.date": formattedDate, // Match DD-MM-YYYY format
-        "schedule.timeSlots.time": startTime,
+        $set: { "schedule.$.timeSlots.$[slot].status": "booked" },
       },
       {
-        $set: { "schedule.$[].timeSlots.$[element].status": "booked" },
-      },
-      {
-        arrayFilters: [
-          { "element.time": startTime, "element.date": formattedDate }, // Ensure both date and time match
-        ],
+        arrayFilters: [{ "slot.time": startTime, "slot.date": formattedDate }],
       }
     );
-    const sortedAppointments = await Appointment.find()
-    .sort({ date: -1 }) // Sorting by date in descending order
-    .exec();
-    res
-      .status(201)
-      .json({ message: "Appointment booked successfully", sortedAppointments });
+
+    res.status(201).json({
+      message: "Appointment booked successfully",
+      appointment,
+    });
   } catch (error) {
-    res.status(500).json({ message: "Server error", error });
+    console.error("Error booking appointment:", error);
+    res.status(500).json({ message: "Server error", error: error.message });
   }
 };
 
@@ -162,7 +328,6 @@ exports.updateAppointment = async (req, res) => {
 exports.addMedicineToAppointment = async (req, res) => {
   try {
     const { useremail, id } = req.params;
-
     // Find user and check if the appointment belongs to them
     const user = await User.findOne({ email: useremail });
     if (!user || !user.appointments.includes(id)) {
@@ -174,7 +339,16 @@ exports.addMedicineToAppointment = async (req, res) => {
     // Update the appointment with a single medicine object
     const updatedAppointment = await Appointment.findByIdAndUpdate(
       id,
-      { medicine: req.body }, // Directly set the medicine object
+      {
+        medicines: {
+          complain: req.body.complain,
+          remedies: req.body.remedies, // Ensure this is structured correctly
+          potency: req.body.potency,
+          duration: req.body.duration,
+          pharmacyName: req.body.pharmacyName,
+          showMedicine: req.body.showMedicine
+        }
+      }, // Directly set the medicine object
       { new: true }
     );
 
@@ -182,7 +356,7 @@ exports.addMedicineToAppointment = async (req, res) => {
       return res.status(404).json({ message: "Appointment not found" });
     }
     const sortedAppointments = await Appointment.find()
-    .sort({ date: -1 }) // Sorting by date in descending order
+    .sort({ date: 1 }) // Sorting by date in descending order
     .exec();
     res.json(sortedAppointments);
   } catch (error) {

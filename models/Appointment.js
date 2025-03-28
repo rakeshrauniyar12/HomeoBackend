@@ -19,13 +19,16 @@ const AppointmentSchema = new mongoose.Schema({
   startTime: { type: String, required: true }, // HH:MM AM/PM format
 
   medicines: {
-    complain: { type: String, default: "" }, // Medicine name
-    remedies: { type: String, default: "" }, // Medicine name
-    dosage: { type: String, default: "" }, // Dosage (e.g., 500mg)
-    potency: { type: String, default: "" }, // Dosage (e.g., 500mg)
-    frequency: { type: String, default: "" }, // e.g., "Twice a Day"
+    complain: { type: String, }, // Complaint or illness
+    remedies: [
+      {
+        medicineName: { type: String, }, // Medicine name
+        dosage: { type: String, default: "" }, // Dosage (e.g., 500mg)
+        frequency: { type: String, default: "" }, // e.g., "Twice a Day"
+      },
+    ],
+    potency: { type: String, default: "" }, // Potency (e.g., High, Medium, Low)
     duration: { type: String, default: "" }, // e.g., "5 Days"
-    nightDuration: { type: String, default: "" }, // e.g., "5 Days"
     pharmacyName: { type: String, default: "" }, // e.g., "5 Days"
     instructions: { type: String }, // Additional instructions (optional)
     showMedicine: { type: String, default: "No" }, // Additional instructions (optional)
@@ -33,9 +36,13 @@ const AppointmentSchema = new mongoose.Schema({
   appointmentFee: { type: String, default: 1 },
   appointmentPaymentStatus: { type: String, default: "Pending" },
   appojntmentPaymentId: { type: String },
-  appojntmentPaymentMode: { type: String,default:"upi" },
+  appojntmentPaymentMode: { type: String, default: "upi" },
   appointmentStatus: { type: String, default: "Booked" },
   createdAt: { type: Date, default: Date.now },
 });
 
+
+
+
 module.exports = mongoose.model("Appointment", AppointmentSchema);
+

@@ -18,7 +18,7 @@ exports.register = async (req, res) => {
     const hashedPassword = await bcrypt.hash(password, salt);
 
     // Create new user
-    user = new User({ firstName, lastName, email, password: hashedPassword });
+    user = new Super({ firstName, lastName, email, password: hashedPassword });
     await user.save();
 
     res.status(201).json({ message: "User registered successfully" });
@@ -61,7 +61,6 @@ exports.getUserDetails = async (req, res) => {
   try {
     // Get the token from headers
     const token = req.headers.authorization?.split(" ")[1]; // Extract Bearer token
-
     if (!token) {
       return res
         .status(401)
