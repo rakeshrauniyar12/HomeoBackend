@@ -31,7 +31,8 @@ exports.register = async (req, res) => {
 exports.login = async (req, res) => {
   try {
     const { email, password } = req.body;
-
+   console.log(email)
+   console.log(password)
     // Check if user exists
     const user = await Super.findOne({ email });
     if (!user) {

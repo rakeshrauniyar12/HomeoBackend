@@ -13,6 +13,8 @@ const timeSlotSchema = new mongoose.Schema({
 const scheduleSchema = new mongoose.Schema({
   startDate: { type: String, required: true }, // Format: YYYY-MM-DD
   endDate: { type: String, required: true }, // Format: YYYY-MM-DD
+  startTime: { type: String, }, // Format: YYYY-MM-DD
+  endTime: { type: String, }, // Format: YYYY-MM-DD
   timeSlots: [timeSlotSchema], // Generated time slots
 });
 

@@ -67,6 +67,8 @@ const updateDoctor = async (req, res) => {
           return {
             startDate: formattedStartDate,
             endDate: formattedEndDate,
+            startTime: startTime,
+            endTime: endTime,
             timeSlots: generateTimeSlotsForRange(
               formattedStartDate,
               formattedEndDate,
@@ -355,6 +357,102 @@ const getAllAppointmentsByDoctorEmail = async (req, res) => {
     });
   }
 };
+const getScheduleByDoctorId = async (req, res) => {
+  try {
+    const { doctorId } = req.params;
+    const doctor = await Doctor.findById(doctorId).select("schedule");
+
+    if (!doctor) {
+      return res.status(404).json({ message: "Doctor not found" });
+    }
+
+    res.status(200).json({ schedule: doctor.schedule });
+  } catch (error) {
+    res
+      .status(500)
+      .json({ message: "Internal server error", error: error.message });
+  }
+};
+const updateScheduleSlot = async (req, res) => {
+  try {
+    const { doctorId } = req.params;
+    const { startTime, startDate, status } = req.body;
+    console.log("Received Data:", req.body);
+
+    const doctor = await Doctor.findById(doctorId);
+    if (!doctor) {
+      return res.status(404).json({ message: "Doctor not found" });
+    }
+
+    let slotUpdated = false;
+    for (const schedule of doctor.schedule) {
+      if (
+        new Date(schedule.startDate) <= new Date(startDate) &&
+        new Date(startDate) <= new Date(schedule.endDate)
+      ) {
+        for (const slot of schedule.timeSlots) {
+          console.log("Checking Slot:", slot);
+
+          if (
+            slot.date === formatDateToDatabase(startDate) &&
+            slot.time === convertTo12Hour(startTime)
+          ) {
+            console.log("Slot Matched, Updating...");
+            slot.status = status;
+            slotUpdated = true;
+            break;
+          }
+        }
+        if (slotUpdated) break;
+      }
+    }
+
+    if (!slotUpdated) {
+      return res.status(404).json({ message: "Time slot not found" });
+    }
+
+    await doctor.save();
+    res.status(200).json({ message: "Schedule updated successfully" });
+  } catch (error) {
+    console.error("Error:", error);
+    res.status(500).json({ message: "Internal server error", error: error.message });
+  }
+};
+
+const formatDateToDatabase = (dateStr) => {
+  const [year, month, day] = dateStr.split("-");
+  return `${day}-${month}-${year}`;
+};
+
+const convertTo12Hour = (timeStr) => {
+  let [hours, minutes] = timeStr.split(":");
+  hours = parseInt(hours);
+  let period = hours >= 12 ? "pm" : "am";
+  hours = hours % 12 || 12;
+  return `${hours}:${minutes} ${period}`;
+};
+const forgotPassword = async (req, res) => {
+  const { email, password } = req.body;
+  try {
+    // Check if user exists
+    const user = await Doctor.findOne({ email });
+
+    if (!user) {
+      return res.status(404).json({ message: "User not found" });
+    }
+
+    // Hash the new password
+    const salt = await bcrypt.genSalt(10);
+    user.password = await bcrypt.hash(password, salt);
+
+    // Save updated user
+    await user.save();
+
+    res.json({ message: "Password updated successfully" });
+  } catch (error) {
+    res.status(500).json({ message: "Server error", error });
+  }
+};
 module.exports = {
   addDoctor,
   updateDoctor,
@@ -365,4 +463,7 @@ module.exports = {
   updateDoctorSchedule,
   getDoctorByToken,
   getAllAppointmentsByDoctorEmail,
+  getScheduleByDoctorId,
+  updateScheduleSlot,
+  forgotPassword
 };

@@ -5,7 +5,9 @@ const cookieParser = require("cookie-parser");
 const dotenv = require("dotenv");
 const bodyParser = require("body-parser");
 const { randomUUID } = require("crypto");
+const mongoose = require("mongoose");
 const Appointment = require("./models/Appointment.js");
+const Pharmacy = require("./models/Pharmacy.js");
 const axios = require("axios");
 const {
   StandardCheckoutClient,
@@ -36,15 +38,12 @@ app.use(bodyParser.json());
 // CORS configuration
 const corsOptions = {
   origin: [
-    "http://localhost:3000",
-    "http://localhost:3001",
+    "*",
     "http://localhost:3002",
+    "http://localhost:3001",
+    "http://localhost:3000",
     "http://localhost:3003",
-    "http://localhost:3004",
-    "http://localhost:3005",
-    "https://homeop.vercel.app",
     "https://drrkvishwakarma.com",
-    "https://homeopadmin.vercel.app",
   ],
   methods: ["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"],
   credentials: true,
@@ -57,7 +56,8 @@ app.options("*", cors(corsOptions)); // Handle preflight requests
 const clientId = process.env.CLIENT_ID;
 const clientSecret = process.env.CLIENT_SECRET;
 const clientVersion = process.env.CLIENT_VERSION;
-const env = Env.SANDBOX;
+// const env = Env.SANDBOX;
+const env = Env.PRODUCTION;
 
 const client = StandardCheckoutClient.getInstance(
   clientId,
@@ -66,16 +66,19 @@ const client = StandardCheckoutClient.getInstance(
   env
 );
 
-app.post("/api/create-order", async (req, res) => {
+app.post("/api/create-appointment", async (req, res) => {
   try {
-    const { amount } = req.body;
+    const { appointmentId, amount } = req.body;
     console.log("Amount", amount);
+    console.log("appoi", appointmentId);
     if (!amount) {
       res.status(500).send("Amount is required.");
     }
-    const merchantId = randomUUID();
-    // const redirectUrl = `http://localhost:8081/check-status?merchantOrderId=${merchantId}`;
-    const redirectUrl = `https://api.drrkvishwakarma.com/check-status?merchantOrderId=${merchantId}`;
+    const merchantId = appointmentId;
+    // const merchantId = randomUUID();
+    console.log("Mercha", merchantId);
+    // const redirectUrl = `http://localhost:8081/check-status-appointment?merchantOrderId=${merchantId}`;
+    const redirectUrl = `https://api.drrkvishwakarma.com/check-status-appointment?merchantOrderId=${merchantId}`;
     // const redirectUrl = `http://localhost:3000`;
     const request = StandardCheckoutPayRequest.builder()
       .merchantOrderId(merchantId)
@@ -93,7 +96,7 @@ app.post("/api/create-order", async (req, res) => {
   }
 });
 
-app.get("/check-status", async (req, res) => {
+app.get("/check-status-appointment", async (req, res) => {
   try {
     const { merchantOrderId } = req.query;
     if (!merchantOrderId) {
@@ -102,26 +105,104 @@ app.get("/check-status", async (req, res) => {
     const response = await client.getOrderStatus(merchantOrderId);
     console.log(response);
     let url = "https://drrkvishwakarma.com";
-    // let url="http://localhost:3000"
+    // let url = "http://localhost:3000";
     if (response.state === "COMPLETED") {
       const transactionId = response.paymentDetails[0].transactionId;
       const paymentMode = response.paymentDetails[0].paymentMode;
-      // const appointment = await Appointment.findById(merchantOrderId);
-      // if (appointment) {
-        // appointment.appointmentPaymentStatus = "Success";
-        // appointment.appojntmentPaymentId = transactionId;
-        // appointment.appojntmentPaymentMode = paymentMode;
+      const appointment = await Appointment.findById(merchantOrderId);
+      if (appointment) {
+        appointment.appointmentPaymentStatus = "Success";
+        appointment.appointmentPaymentId = transactionId;
+        appointment.appointmentPaymentMode = paymentMode;
 
-        // appointment.save();
-        return res.redirect(
-          `${url}/paymentsuccess?status=success`
-        ); // Send the URL to redirect to
-      // }
+        appointment.save();
+        return res.redirect(`${url}/#/paymentsuccess`); // Send the URL to redirect to
+      }
+      // return res.redirect(`${url}/#/paymentsuccess`);
       // return res.json({ redirectUrl: "http://localhost:3000" });;  // Send the URL to redirect to
     } else {
       // const appointment = await Appointment.findByIdAndDelete(merchantOrderId);
 
-      return res.redirect(`${url}/paymentfail?status=fail`); // Send a different URL if not completed
+      return res.redirect(`${url}/#/paymentfail`); // Send a different URL if not completed
+    }
+  } catch (error) {
+    console.log("Error", error);
+  }
+});
+
+app.post("/api/create-order", async (req, res) => {
+  try {
+    const { pharmacyId, orderId, amount } = req.body;
+    console.log("Amount", amount);
+    console.log("appoi", orderId);
+    console.log("pharmacy", pharmacyId);
+    if (!amount) {
+      res.status(500).send("Amount is required.");
+    }
+    const merchantId = orderId;
+    // const merchantId = randomUUID();
+    console.log("Mercha", merchantId);
+    // const redirectUrl = `http://localhost:8081/check-status-order?merchantOrderId=${merchantId}&pharmacyId=${pharmacyId}`;
+    const redirectUrl = `https://api.drrkvishwakarma.com/check-status-order?merchantOrderId=${merchantId}&pharmacyId=${pharmacyId}`;
+    // const redirectUrl = `http://localhost:3000`;
+    const request = StandardCheckoutPayRequest.builder()
+      .merchantOrderId(merchantId)
+      .amount(amount)
+      .redirectUrl(redirectUrl)
+      .build();
+    client.pay(request).then((response) => {
+      res.json({
+        checkoutPageUrl: response.redirectUrl,
+        merchantOrderId: merchantId,
+      });
+    });
+  } catch (error) {
+    console.log("Error", error);
+  }
+});
+
+app.get("/check-status-order", async (req, res) => {
+  try {
+    const { merchantOrderId, pharmacyId } = req.query;
+    if (!merchantOrderId) {
+      return res.status(400).send("Merchant Id is required.");
+    }
+    const response = await client.getOrderStatus(merchantOrderId);
+    console.log("Line 170", response);
+    let url = "https://drrkvishwakarma.com";
+    // let url = "http://localhost:3000";
+    if (response.state === "COMPLETED") {
+      console.log("Line 174", response);
+      const transactionId = response.paymentDetails[0].transactionId;
+      // const paymentMode = response.paymentDetails[0].paymentMode;
+      const pharmacy = await Pharmacy.findById(
+        new mongoose.Types.ObjectId(pharmacyId)
+      );
+      if (pharmacy) {
+        console.log("Line 179", pharmacy);
+        console.log("Line 179", pharmacy.orders);
+        const order = pharmacy.orders.find(
+          (order) => order._id.toString() === merchantOrderId
+        );
+        if (order) {
+          console.log("Line 185", order);
+          order.paymentStatus = "Completed";
+          order.orderPaymentId = transactionId;
+          await pharmacy.save(); // Save updated order status
+          return res.redirect(`${url}/#/myappointment`);
+        } else {
+          console.log("Order not found!");
+          return res.redirect(`${url}/#/myappointment`);
+        } // Send the URL to redirect to
+      } else{
+        console.log("Pharmacy not found");
+      }
+      // return res.redirect(`${url}/#/paymentsuccess`);
+      // return res.json({ redirectUrl: "http://localhost:3000" });;  // Send the URL to redirect to
+    } else {
+      // const appointment = await Appointment.findByIdAndDelete(merchantOrderId);
+
+      return res.redirect(`${url}/#/myappointment`); // Send a different URL if not completed
     }
   } catch (error) {
     console.log("Error", error);
