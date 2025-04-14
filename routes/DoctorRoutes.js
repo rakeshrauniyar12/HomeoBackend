@@ -12,7 +12,7 @@ router.put("/update/:doctorId", doctorController.updateDoctor);
 router.put("/updateschedule", doctorController.updateDoctorSchedule);
 router.get("/getschedule/:doctorId", doctorController.getScheduleByDoctorId);
 router.put("/updatescheduleslot/:doctorId", doctorController.updateScheduleSlot);
-router.delete("/delete/:id", doctorController.deleteDoctor);
+router.delete("/delete/:doctorId", doctorController.deleteDoctor);
 router.post("/forgotpassword", doctorController.forgotPassword);
 
 module.exports = router;

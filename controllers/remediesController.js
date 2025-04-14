@@ -1,11 +1,19 @@
 const mongoose = require("mongoose");
 const Remedies = require("../models/Remedies");
-const Pharmacy = require("../models/Pharmacy"); // Assuming you have a Pharmacy model
+const SuperRemedies = require("../models/SuperRemedies");
+const { Pharmacy } = require("../models/Pharmacy");
 
 // ✅ Add remedies to a pharmacy
 const addRemedies = async (req, res) => {
   try {
-    const { pharmacyEmail, remedyName, quantity } = req.body;
+    const {
+      pharmacyEmail,
+      remedyName,
+      potency,
+      quantity,
+      unit,
+      adminRemediesId,
+    } = req.body;
 
     // Find the pharmacy by email
     const pharmacy = await Pharmacy.findOne({ email: pharmacyEmail });
@@ -15,29 +23,45 @@ const addRemedies = async (req, res) => {
         .json({ success: false, message: "Pharmacy not found" });
     }
 
+    let checkAdmin = await SuperRemedies.findById(adminRemediesId);
+
     // Check if a remedy with the same name exists in the Remedies collection
-    let remedy = await Remedies.findOne({ remediesName: remedyName });
+    let checkRemedy = await Remedies.findOne({ remediesName: remedyName });
 
-    if (!remedy) {
-      // If remedy does not exist, create a new one
-      remedy = new Remedies({ remediesName: remedyName, quantity });
-      await remedy.save();
+    let remedy;
+
+    if (!checkRemedy) {
+      remedy = new Remedies({
+        remediesName: remedyName,
+        quantity,
+        potency,
+        unit,
+      });
+      await remedy.save(); // Don't forget to save the new remedy
     } else {
-      // If remedy already exists, you can update the quantity (optional)
-      remedy.quantity = quantity;
-      await remedy.save();
+      checkRemedy.quantity =
+        parseInt(checkRemedy.quantity) + parseInt(quantity); // cast to number if needed
+      await checkRemedy.save();
+      remedy = checkRemedy;
     }
-
-    // Check if the remedy ID is already linked to the pharmacy
-    const remedyExists = pharmacy.remedies.some((id) => id.equals(remedy._id));
-    if (remedyExists) {
+    if (parseInt(checkAdmin.quantity) >= parseInt(quantity)) {
+      checkAdmin.quantity = (
+        parseInt(checkAdmin.quantity) - parseInt(quantity)
+      ).toString(); // convert back to string if needed
+      await checkAdmin.save();
+    } else {
+      return res.status(400).json({
+        success: false,
+        message: "Not enough remedy quantity in admin stock",
+      });
+    }
+    if (pharmacy.remedies.includes(remedy._id)) {
       return res.status(400).json({
         success: false,
         message: "Remedy already exists in the pharmacy",
       });
     }
 
-    // Add the remedy's ObjectId to the pharmacy's remedies array
     pharmacy.remedies.push(remedy._id);
     await pharmacy.save();
 
@@ -51,18 +75,31 @@ const addRemedies = async (req, res) => {
     });
   }
 };
-
+const getAllRemedies = async (req, res) => {
+  try {
+    const remedies = await Remedies.find().sort({ createdAt: -1 }); // newest first
+    res.status(200).json(remedies);
+  } catch (error) {
+    res.status(500).json({ message: "Failed to fetch remedies", error });
+  }
+};
 // ✅ Update a remedy by ID
 const updateById = async (req, res) => {
   try {
-    const { id } = req.params;
+    const { pharmacyEmail, id } = req.params;
     const updateData = req.body;
+
+    const pharmacy = await Pharmacy.findOne({ email: pharmacyEmail });
+    if (!pharmacy || !pharmacy.remedies.includes(id)) {
+      return res
+        .status(404)
+        .json({ success: false, message: "Remedy not found in pharmacy" });
+    }
 
     const updatedRemedy = await Remedies.findByIdAndUpdate(id, updateData, {
       new: true,
       runValidators: true,
     });
-
     if (!updatedRemedy) {
       return res
         .status(404)
@@ -81,9 +118,15 @@ const updateById = async (req, res) => {
 // ✅ Get a remedy by ID
 const getById = async (req, res) => {
   try {
-    const { id } = req.params;
-    const remedy = await Remedies.findById(id);
+    const { pharmacyEmail, id } = req.params;
+    const pharmacy = await Pharmacy.findOne({ email: pharmacyEmail });
+    if (!pharmacy || !pharmacy.remedies.includes(id)) {
+      return res
+        .status(404)
+        .json({ success: false, message: "Remedy not found in pharmacy" });
+    }
 
+    const remedy = await Remedies.findById(id);
     if (!remedy) {
       return res
         .status(404)
@@ -99,11 +142,21 @@ const getById = async (req, res) => {
   }
 };
 
-// ✅ Get all remedies
+// ✅ Get all remedies for a pharmacy
 const getAll = async (req, res) => {
   try {
-    const remedies = await Remedies.find();
-    return res.status(200).json({ success: true, remedies });
+    const { pharmacyEmail } = req.params;
+    const pharmacy = await Pharmacy.findOne({ email: pharmacyEmail }).populate(
+      "remedies"
+    );
+    if (!pharmacy) {
+      return res
+        .status(404)
+        .json({ success: false, message: "Pharmacy not found" });
+    }
+    console.log("Pharm", pharmacy);
+    console.log("Pharm", pharmacy.remedies);
+    return res.status(200).json({ success: true, remedies: pharmacy.remedies });
   } catch (error) {
     return res.status(500).json({
       success: false,
@@ -116,8 +169,6 @@ const getAll = async (req, res) => {
 const deleteById = async (req, res) => {
   try {
     const { pharmacyEmail, id } = req.params;
-
-    // Find the pharmacy by email
     const pharmacy = await Pharmacy.findOne({ email: pharmacyEmail });
     if (!pharmacy) {
       return res
@@ -125,33 +176,20 @@ const deleteById = async (req, res) => {
         .json({ success: false, message: "Pharmacy not found" });
     }
 
-    // Check if the remedy exists in this pharmacy's remedies list
     const remedyIndex = pharmacy.remedies.indexOf(id);
     if (remedyIndex === -1) {
       return res
         .status(404)
-        .json({ success: false, message: "Remedy not found in this pharmacy" });
+        .json({ success: false, message: "Remedy not found in pharmacy" });
     }
 
-    // Remove the remedy from the pharmacy's remedies array
     pharmacy.remedies.splice(remedyIndex, 1);
     await pharmacy.save();
 
-    // Delete the remedy from the Remedies collection
-    const deletedRemedy = await Remedies.findByIdAndDelete(id);
-    if (!deletedRemedy) {
-      return res
-        .status(404)
-        .json({
-          success: false,
-          message: "Remedy not found in Remedies collection",
-        });
-    }
-
-    return res.status(200).json({
-      success: true,
-      message: "Remedy removed from pharmacy and deleted successfully",
-    });
+    await Remedies.findByIdAndDelete(id);
+    return res
+      .status(200)
+      .json({ success: true, message: "Remedy removed successfully" });
   } catch (error) {
     return res.status(500).json({
       success: false,
@@ -160,4 +198,11 @@ const deleteById = async (req, res) => {
   }
 };
 
-module.exports = { addRemedies, updateById, getById, getAll, deleteById };
+module.exports = {
+  addRemedies,
+  getAllRemedies,
+  updateById,
+  getById,
+  getAll,
+  deleteById,
+};

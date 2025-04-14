@@ -1,7 +1,7 @@
 const mongoose = require("mongoose");
 
 const timeSlotSchema = new mongoose.Schema({
-  date:{type:String},
+  date: { type: String },
   time: { type: String, required: true }, // Example: "01:00 PM"
   status: {
     type: String,
@@ -13,15 +13,16 @@ const timeSlotSchema = new mongoose.Schema({
 const scheduleSchema = new mongoose.Schema({
   startDate: { type: String, required: true }, // Format: YYYY-MM-DD
   endDate: { type: String, required: true }, // Format: YYYY-MM-DD
-  startTime: { type: String, }, // Format: YYYY-MM-DD
-  endTime: { type: String, }, // Format: YYYY-MM-DD
+  startTime: { type: String }, // Format: YYYY-MM-DD
+  endTime: { type: String }, // Format: YYYY-MM-DD
   timeSlots: [timeSlotSchema], // Generated time slots
 });
 
 const doctorSchema = new mongoose.Schema({
   name: { type: String, required: true },
   email: { type: String, required: true, unique: true },
-  password: { type: String, },
+  location: { type: String, default: "" },
+  password: { type: String },
   phone: { type: String, required: true },
   specialization: { type: String, required: true },
   appointments: [{ type: mongoose.Schema.Types.ObjectId, ref: "Appointment" }], // Link to Appointments

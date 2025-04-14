@@ -1,12 +1,13 @@
-const Pharmacy = require("../models/Pharmacy.js");
+const mongoose = require("mongoose"); // ✅ Import mongoose at the top
+const { Pharmacy } = require("../models/Pharmacy.js");
 const Appointment = require("../models/Appointment.js");
 const OrderCounter = require("../models/OrderCounter.js");
 const Remedy = require("../models/Remedies.js");
-
+const { Order } = require("../models/Pharmacy.js");
 // Add a new pharmacy
 exports.addPharmacy = async (req, res) => {
+  console.log("Body", req.body);
   try {
-    // Check if the email already exists
     const existingPharmacy = await Pharmacy.findOne({ email: req.body.email });
 
     if (existingPharmacy) {
@@ -19,15 +20,19 @@ exports.addPharmacy = async (req, res) => {
 
     res.status(201).json({ message: "Pharmacy added successfully" });
   } catch (error) {
-    // Handle duplicate key errors from MongoDB (code 11000)
-    if (error.code === 11000) {
-      return res.status(400).json({ message: "Email already exists" });
-    }
-
     res.status(500).json({ message: "Failed to add pharmacy", error });
   }
 };
-
+exports.getAllPharmacyEmails = async (req, res) => {
+  try {
+    const pharmacies = await Pharmacy.find({}, "email"); // only fetch email field
+    const emails = pharmacies.map((pharmacy) => pharmacy.email);
+    res.status(200).json(emails);
+  } catch (error) {
+    console.error("Error fetching pharmacy emails:", error);
+    res.status(500).json({ error: "Internal Server Error" });
+  }
+};
 exports.updateOrderPharmacy = async (req, res) => {
   try {
     const {
@@ -38,7 +43,8 @@ exports.updateOrderPharmacy = async (req, res) => {
       totalPrice,
       paymentMode,
     } = req.body;
-    console.log("Requ", req.body);
+    console.log("Body", req.body);
+
     // Find the pharmacy order by appointmentOrderId
     const pharmacy = await Pharmacy.findOne({ _id: pharmacyId });
     if (!pharmacy) {
@@ -46,11 +52,12 @@ exports.updateOrderPharmacy = async (req, res) => {
     }
 
     // Find and update the order within the pharmacy
-    const order = pharmacy.orders.find(
-      (order) => order._id == appointmentOrderId
-    );
+    const order = await Order.findById(appointmentOrderId);
     if (!order) {
       return res.status(404).json({ message: "Order not found" });
+    }
+    if (order.pharmacyId.toString() !== pharmacyId) {
+      return res.status(403).json({ message: "Unauthorized access to order" });
     }
     order.totalPrice = totalPrice;
     order.paymentMode = paymentMode;
@@ -84,6 +91,7 @@ exports.updateOrderPharmacy = async (req, res) => {
             ...medicineItem,
             quantity: updatedRemedy.quantity,
             price: updatedRemedy.price,
+            unit: updatedRemedy.unit,
           };
         }
         return medicineItem;
@@ -95,21 +103,26 @@ exports.updateOrderPharmacy = async (req, res) => {
     await appointment.save();
 
     // Mark order as completed
-    if(paymentMode==="UPI"){
+    if (paymentMode === "UPI") {
+      console.log("Payment", paymentMode);
       order.orderStatus = "Completed";
-      order.paymentMode=paymentMode;
-      order.paymentStatus="Completed";
-      order.orderPaymentId=req.body.orderPaymentId;
+      order.paymentMode = paymentMode;
+      order.paymentStatus = "Completed";
+      order.orderPaymentId = req.body.orderPaymentId;
+      order.orderPaymentImageUrl = req.body.orderPaymentImageUrl;
+      await order.save();
       await pharmacy.save();
       res.status(200).json({ message: "Order updated successfully", order });
-    }else if(paymentMode==="Cash"){
+    } else if (paymentMode === "Cash") {
       order.orderStatus = "Completed";
-      order.paymentMode=paymentMode;
-      order.paymentStatus="Completed";
+      order.paymentMode = paymentMode;
+      order.paymentStatus = "Completed";
+      await order.save();
       await pharmacy.save();
       res.status(200).json({ message: "Order updated successfully", order });
-    }else{
+    } else {
       order.orderStatus = "Completed";
+      await order.save();
       await pharmacy.save();
       res.status(200).json({ message: "Order updated successfully", order });
     }
@@ -122,11 +135,12 @@ exports.updateOrderPharmacy = async (req, res) => {
 exports.updatePharmacyFields = async (req, res) => {
   try {
     const { id } = req.params; // Get the document ID from the request parameters
-    const updates = req.body; // Get the fields to update from the request body
-
+    const updates = req.body;
+    console.log("Update", req.body); // Get the fields to update from the request body
+    const objectId = new mongoose.Types.ObjectId(id);
     // Use `findByIdAndUpdate` with `$set` to dynamically update fields
     const updatedPharmacy = await Pharmacy.findByIdAndUpdate(
-      id,
+      objectId,
       { $set: updates },
       { new: true, runValidators: true } // Return the updated document and validate input
     );
@@ -141,6 +155,28 @@ exports.updatePharmacyFields = async (req, res) => {
     res.status(500).json({ message: "Failed to update pharmacy fields" });
   }
 };
+
+exports.deletePharmacyById = async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    // Validate ObjectId
+    const objectId = new mongoose.Types.ObjectId(id);
+
+    // Delete pharmacy by ID
+    const deletedPharmacy = await Pharmacy.findByIdAndDelete(objectId);
+
+    if (!deletedPharmacy) {
+      return res.status(404).json({ message: "Pharmacy not found" });
+    }
+
+    res.status(200).json({ message: "Pharmacy deleted successfully" });
+  } catch (error) {
+    console.error("Delete Error:", error);
+    res.status(500).json({ message: "Failed to delete pharmacy" });
+  }
+};
+
 exports.addOrderToPharmacy = async (req, res) => {
   try {
     const { id } = req.params;
@@ -158,21 +194,24 @@ exports.addOrderToPharmacy = async (req, res) => {
     );
 
     const newOrderId = counter.value;
-    const newOrder = {
+    const newOrder = new Order({
       orderId: newOrderId,
       appointmentId,
       pharmacyId: pharmacy._id,
       paymentStatus: "Pending", // Default as per schema
       orderStatus: "Pending",
-    };
+    });
 
-    // Push new order into pharmacy's orders array
-    pharmacy.orders.push(newOrder);
+    await newOrder.save();
 
-    // Save updated pharmacy
-    const updatedPharmacy = await pharmacy.save();
-
-    res.json(updatedPharmacy);
+    // Push order reference
+    pharmacy.orders.push(newOrder._id);
+    await pharmacy.save();
+    res.json({
+      message: "Order added to pharmacy",
+      pharmacyDetail: pharmacy,
+      order: newOrder,
+    });
   } catch (error) {
     console.error("Error adding order:", error);
     res.status(500).json({ message: "Failed to add order to pharmacy" });
@@ -195,50 +234,51 @@ exports.getPharmacyByEmail = async (req, res) => {
 };
 
 // View all orders by pharmacy email
+
+// View all orders by pharmacy email
 exports.viewAllOrdersByPharmacyEmail = async (req, res) => {
   try {
-    const pharmacy = await Pharmacy.findOne({ email: req.params.email });
+    const pharmacy = await Pharmacy.findOne({
+      email: req.params.email,
+    }).populate("orders");
 
     if (!pharmacy) {
       return res.status(404).json({ message: "Pharmacy not found" });
     }
+
     const ordersWithAppointments = await Promise.all(
       pharmacy.orders.map(async (order) => {
-        const appointment = await Appointment.findOne({
-          _id: order.appointmentId,
-        });
-
+        const appointment = await Appointment.findById(order.appointmentId);
         return {
-          ...order.toObject(), // Convert Mongoose document to plain object
-          appointment, // Attach appointment details
+          ...order.toObject(),
+          appointment,
         };
       })
     );
 
-    console.log("Order", pharmacy.orders);
     res.status(200).json(ordersWithAppointments);
   } catch (error) {
     res.status(500).json({ message: "Failed to retrieve orders", error });
   }
 };
 
+// View pending orders
 exports.viewPendingOrdersByPharmacyEmail = async (req, res) => {
   try {
-    const pharmacy = await Pharmacy.findOne({ email: req.params.email });
-
+    const pharmacy = await Pharmacy.findOne({
+      email: req.params.email,
+    }).populate({
+      path: "orders",
+      match: { orderStatus: "Pending" },
+    });
+    console.log("Pha", pharmacy);
     if (!pharmacy) {
       return res.status(404).json({ message: "Pharmacy not found" });
     }
 
-    const pendingOrders = pharmacy.orders.filter(
-      (order) => order.orderStatus === "Pending"
-    );
-
     const ordersWithAppointments = await Promise.all(
-      pendingOrders.map(async (order) => {
-        const appointment = await Appointment.findOne({
-          _id: order.appointmentId,
-        });
+      pharmacy.orders.map(async (order) => {
+        const appointment = await Appointment.findById(order.appointmentId);
         return {
           ...order.toObject(),
           appointment,
@@ -254,23 +294,23 @@ exports.viewPendingOrdersByPharmacyEmail = async (req, res) => {
   }
 };
 
+// View completed orders by email
 exports.viewCompletedOrdersByPharmacyEmail = async (req, res) => {
   try {
-    const pharmacy = await Pharmacy.findOne({ email: req.params.email });
+    const pharmacy = await Pharmacy.findOne({
+      email: req.params.email,
+    }).populate({
+      path: "orders",
+      match: { orderStatus: "Completed" },
+    });
 
     if (!pharmacy) {
       return res.status(404).json({ message: "Pharmacy not found" });
     }
 
-    const completedOrders = pharmacy.orders.filter(
-      (order) => order.orderStatus === "Completed"
-    );
-
     const ordersWithAppointments = await Promise.all(
-      completedOrders.map(async (order) => {
-        const appointment = await Appointment.findOne({
-          _id: order.appointmentId,
-        });
+      pharmacy.orders.map(async (order) => {
+        const appointment = await Appointment.findById(order.appointmentId);
         return {
           ...order.toObject(),
           appointment,
@@ -286,24 +326,21 @@ exports.viewCompletedOrdersByPharmacyEmail = async (req, res) => {
   }
 };
 
+// View completed orders by pharmacy ID
 exports.viewCompletedOrdersByPharmacyId = async (req, res) => {
   try {
-    const pharmacy = await Pharmacy.findOne({ _id: req.params.id });
+    const pharmacy = await Pharmacy.findById(req.params.id).populate({
+      path: "orders",
+      match: { orderStatus: "Completed" },
+    });
 
-    console.log("Pharm", pharmacy);
     if (!pharmacy) {
       return res.status(404).json({ message: "Pharmacy not found" });
     }
 
-    const completedOrders = pharmacy.orders.filter(
-      (order) => order.orderStatus === "Completed"
-    );
-
     const ordersWithAppointments = await Promise.all(
-      completedOrders.map(async (order) => {
-        const appointment = await Appointment.findOne({
-          _id: order.appointmentId,
-        });
+      pharmacy.orders.map(async (order) => {
+        const appointment = await Appointment.findById(order.appointmentId);
         return {
           ...order.toObject(),
           appointment,
@@ -319,25 +356,38 @@ exports.viewCompletedOrdersByPharmacyId = async (req, res) => {
   }
 };
 
+// Fetch specific order by pharmacy ID and order ID
 exports.fetchOrderByPharmacyIdAndOrderId = async (req, res) => {
   try {
     const { pharmacyId, orderId } = req.params;
 
-    // Find the pharmacy by ID
+    // Validate pharmacy exists
     const pharmacy = await Pharmacy.findById(pharmacyId);
-
     if (!pharmacy) {
       return res.status(404).json({ message: "Pharmacy not found" });
     }
 
-    // Find the specific order in the pharmacy's orders array
-    const order = pharmacy.orders.id(orderId);
+    // Check if order belongs to pharmacy
+    const isOrderAssociated = pharmacy.orders.some(
+      (id) => id.toString() === orderId
+    );
+    if (!isOrderAssociated) {
+      return res
+        .status(403)
+        .json({ message: "Order does not belong to this pharmacy" });
+    }
 
+    // Fetch the order
+    const order = await Order.findById(orderId);
     if (!order) {
       return res.status(404).json({ message: "Order not found" });
     }
 
-    res.status(200).json(order);
+    const appointment = await Appointment.findById(order.appointmentId);
+    res.status(200).json({
+      ...order.toObject(),
+      appointment,
+    });
   } catch (error) {
     res
       .status(500)
@@ -348,7 +398,16 @@ exports.fetchOrderByPharmacyIdAndOrderId = async (req, res) => {
 // Get all pharmacies
 exports.getAllPharmacies = async (req, res) => {
   try {
-    const pharmacies = await Pharmacy.find();
+    const pharmacies = await Pharmacy.find()
+      .populate("remedies") // populate remedies details
+      .populate({
+        path: "orders",
+        populate: {
+          path: "appointmentId", // populate appointment details inside each order
+          model: "Appointment",
+        },
+      });
+
     res.status(200).json(pharmacies);
   } catch (error) {
     res.status(500).json({ message: "Failed to retrieve pharmacies", error });

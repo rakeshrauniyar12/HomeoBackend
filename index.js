@@ -8,6 +8,8 @@ const { randomUUID } = require("crypto");
 const mongoose = require("mongoose");
 const Appointment = require("./models/Appointment.js");
 const Pharmacy = require("./models/Pharmacy.js");
+const appointmentController = require("./controllers/appointmentController.js");
+
 const axios = require("axios");
 const {
   StandardCheckoutClient,
@@ -22,6 +24,10 @@ const pharmacyRoute = require("./routes/PharmacyRoutes.js");
 const otpRoute = require("./routes/OtpRoutes.js");
 const remediesRoute = require("./routes/RemediesRoutes.js");
 const superAdminRoute = require("./routes/SuperAdminRoutes.js");
+const optionRoute = require("./routes/OptionRoutes.js");
+const superRemediesRoute = require("./routes/SuperRemediesRoutes.js");
+const appointmentFeeRoute = require("./routes/AppointmentFeeRoutes.js");
+const remedyOrderRoute = require("./routes/RemedyOrderRoutes.js");
 
 dotenv.config();
 
@@ -43,6 +49,7 @@ const corsOptions = {
     "http://localhost:3001",
     "http://localhost:3000",
     "http://localhost:3003",
+    "http://localhost:3004",
     "https://drrkvishwakarma.com",
   ],
   methods: ["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"],
@@ -56,8 +63,8 @@ app.options("*", cors(corsOptions)); // Handle preflight requests
 const clientId = process.env.CLIENT_ID;
 const clientSecret = process.env.CLIENT_SECRET;
 const clientVersion = process.env.CLIENT_VERSION;
-// const env = Env.SANDBOX;
-const env = Env.PRODUCTION;
+const env = Env.SANDBOX;
+// const env = Env.PRODUCTION;
 
 const client = StandardCheckoutClient.getInstance(
   clientId,
@@ -68,21 +75,22 @@ const client = StandardCheckoutClient.getInstance(
 
 app.post("/api/create-appointment", async (req, res) => {
   try {
-    const { appointmentId, amount } = req.body;
-    console.log("Amount", amount);
+    const { appointmentId, consultationAmount } = req.body;
+    console.log("Amount", consultationAmount);
     console.log("appoi", appointmentId);
-    if (!amount) {
+    let updatedAmount = consultationAmount * 100;
+    if (!updatedAmount) {
       res.status(500).send("Amount is required.");
     }
     const merchantId = appointmentId;
     // const merchantId = randomUUID();
     console.log("Mercha", merchantId);
-    // const redirectUrl = `http://localhost:8081/check-status-appointment?merchantOrderId=${merchantId}`;
-    const redirectUrl = `https://api.drrkvishwakarma.com/check-status-appointment?merchantOrderId=${merchantId}`;
+    const redirectUrl = `http://localhost:8081/check-status-appointment?merchantOrderId=${merchantId}`;
+    // const redirectUrl = `https://api.drrkvishwakarma.com/check-status-appointment?merchantOrderId=${merchantId}`;
     // const redirectUrl = `http://localhost:3000`;
     const request = StandardCheckoutPayRequest.builder()
       .merchantOrderId(merchantId)
-      .amount(amount)
+      .amount(updatedAmount)
       .redirectUrl(redirectUrl)
       .build();
     client.pay(request).then((response) => {
@@ -104,8 +112,8 @@ app.get("/check-status-appointment", async (req, res) => {
     }
     const response = await client.getOrderStatus(merchantOrderId);
     console.log(response);
-    let url = "https://drrkvishwakarma.com";
-    // let url = "http://localhost:3000";
+    // let url = "https://drrkvishwakarma.com";
+    let url = "http://localhost:3000";
     if (response.state === "COMPLETED") {
       const transactionId = response.paymentDetails[0].transactionId;
       const paymentMode = response.paymentDetails[0].paymentMode;
@@ -114,15 +122,17 @@ app.get("/check-status-appointment", async (req, res) => {
         appointment.appointmentPaymentStatus = "Success";
         appointment.appointmentPaymentId = transactionId;
         appointment.appointmentPaymentMode = paymentMode;
-
+        // appointmentController.sendAppointmentEmails(appointment);
         appointment.save();
         return res.redirect(`${url}/#/paymentsuccess`); // Send the URL to redirect to
       }
-      // return res.redirect(`${url}/#/paymentsuccess`);
-      // return res.json({ redirectUrl: "http://localhost:3000" });;  // Send the URL to redirect to
     } else {
+      const appointment = await Appointment.findById(merchantOrderId);
       // const appointment = await Appointment.findByIdAndDelete(merchantOrderId);
-
+      appointmentController.deleteAppointmentIfPaymentFail(
+        merchantOrderId,
+        appointment.email
+      );
       return res.redirect(`${url}/#/paymentfail`); // Send a different URL if not completed
     }
   } catch (error) {
@@ -194,7 +204,7 @@ app.get("/check-status-order", async (req, res) => {
           console.log("Order not found!");
           return res.redirect(`${url}/#/myappointment`);
         } // Send the URL to redirect to
-      } else{
+      } else {
         console.log("Pharmacy not found");
       }
       // return res.redirect(`${url}/#/paymentsuccess`);
@@ -217,6 +227,10 @@ app.use("/api/doctor", doctorRoute);
 app.use("/api/pharmacy", pharmacyRoute);
 app.use("/api/remedies", remediesRoute);
 app.use("/api/super", superAdminRoute);
+app.use("/api/option", optionRoute);
+app.use("/api/superremedies", superRemediesRoute);
+app.use("/api/appointmentfee", appointmentFeeRoute);
+app.use("/api/remedyorder", remedyOrderRoute);
 
 // Root endpoint
 app.get("/", (req, res) => {

@@ -2,7 +2,7 @@ const bcrypt = require("bcryptjs");
 const jwt = require("jsonwebtoken");
 const User = require("../models/User");
 const Doctor = require("../models/Doctor");
-const Pharmacy = require("../models/Pharmacy");
+const {Pharmacy} = require("../models/Pharmacy");
 
 const registerUser = async (req, res) => {
   try {
@@ -106,7 +106,9 @@ const getAllUsersByDoctorEmail = async (req, res) => {
     }
 
     // Find doctor and get all appointment IDs
-    const doctor = await Doctor.findOne({ email: doctoremail }).populate("appointments");
+    const doctor = await Doctor.findOne({ email: doctoremail }).populate(
+      "appointments"
+    );
 
     if (!doctor) {
       return res.status(404).json({ message: "Doctor not found" });
@@ -116,24 +118,26 @@ const getAllUsersByDoctorEmail = async (req, res) => {
     const doctorAppointments = doctor.appointments;
 
     // Extract unique user emails from appointments
-    const uniqueUserEmails = [...new Set(doctorAppointments.map(app => app.email))];
+    const uniqueUserEmails = [
+      ...new Set(doctorAppointments.map((app) => app.email)),
+    ];
 
     // Find all users with these emails
     const users = await User.find({ email: { $in: uniqueUserEmails } });
 
     // Attach only relevant appointments to each user
-    const usersWithAppointments = users.map(user => {
-      const userAppointments = doctorAppointments.filter(app => app.email === user.email);
+    const usersWithAppointments = users.map((user) => {
+      const userAppointments = doctorAppointments.filter(
+        (app) => app.email === user.email
+      );
       return { ...user.toObject(), appointments: userAppointments };
     });
-   console.log("User app",usersWithAppointments)
+    console.log("User app", usersWithAppointments);
     res.status(200).json(usersWithAppointments);
   } catch (error) {
     res.status(500).json({ message: "Server error", error: error.message });
   }
 };
-
-
 
 const getUserDetails = async (req, res) => {
   try {
@@ -171,58 +175,60 @@ const getUserAppointmentsByEmail = async (req, res) => {
       return res.status(404).json({ message: "User not found" });
     }
 
-    // Get all appointments for the user
-    let appointments = user.appointments;
+    const appointments = user.appointments;
 
-    // Fetch and attach order details to each appointment
+    // Attach order and pharmacy details
     const updatedAppointments = await Promise.all(
       appointments.map(async (appointment) => {
-        if (
-          appointment.appointmentOrderId &&
-          appointment.medicines?.pharmacyId
-        ) {
-          // Find the pharmacy that contains the order
-          const pharmacy = await Pharmacy.findOne({
-            _id: appointment.medicines.pharmacyId,
-            "orders._id": appointment.appointmentOrderId,
-          });
+        try {
+          const { appointmentOrderId, medicines } = appointment;
 
-          if (pharmacy) {
-            // Find the specific order from the pharmacy's orders array
-            const order = pharmacy.orders.find(
-              (o) =>
-                o._id.toString() === appointment.appointmentOrderId.toString()
-            );
+          if (appointmentOrderId && medicines?.pharmacyId) {
+            // Find the pharmacy and populate its orders
+            const pharmacy = await Pharmacy.findById(medicines.pharmacyId).populate("orders");
 
-            if (order) {
-              return {
-                ...appointment.toObject(),
-                orderDetails: order,
-                pharmacyDetails: {
-                  name: pharmacy.pharmacyName,
-                  address: pharmacy.address,
-                  phoneNumber: pharmacy.phoneNumber,
-                  email: pharmacy.email,
-                },
-              };
+            if (pharmacy) {
+              // Find the specific order from the populated orders
+              const order = pharmacy.orders.find(
+                (o) => o._id.toString() === appointmentOrderId.toString()
+              );
+
+              if (order) {
+                return {
+                  ...appointment.toObject(),
+                  orderDetails: order,
+                  pharmacyDetails: {
+                    name: pharmacy.pharmacyName,
+                    address: pharmacy.address,
+                    phoneNumber: pharmacy.phoneNumber,
+                    email: pharmacy.email,
+                  },
+                };
+              }
             }
           }
+
+          // If no matching order or pharmacy, return plain appointment
+          return appointment.toObject();
+        } catch (err) {
+          console.error("Error processing appointment:", err);
+          return appointment.toObject(); // Fail-safe return
         }
-        return appointment.toObject(); // Ensure consistent response format
       })
     );
 
     res.json(updatedAppointments);
   } catch (error) {
-    console.error("Error:", error);
+    console.error("Error fetching user appointments:", error);
     res.status(500).json({ message: "Server error", error });
   }
 };
 
+
 // Get All Users
 const getAllUsers = async (req, res) => {
   try {
-    const users = await User.find();
+    const users = await User.find().populate("appointments"); // populate appointments
     res.json(users);
   } catch (error) {
     res.status(500).json({ message: error.message });

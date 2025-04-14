@@ -1,11 +1,18 @@
 const Doctor = require("../models/Doctor.js");
 const Appointment = require("../models/Appointment.js");
+const { Pharmacy, Order } = require("../models/Pharmacy");
+const User = require("../models/User");
 const moment = require("moment");
 const bcrypt = require("bcryptjs");
 const jwt = require("jsonwebtoken");
+const dayjs = require("dayjs");
+const customParseFormat = require("dayjs/plugin/customParseFormat");
+dayjs.extend(customParseFormat);
+
 const addDoctor = async (req, res) => {
   try {
-    const { name, email, phone, specialization, schedule, password } = req.body;
+    const { name, email, phone, specialization, schedule, password, location } =
+      req.body;
     if (!password) {
       password = "12345";
     }
@@ -37,6 +44,7 @@ const addDoctor = async (req, res) => {
       phone,
       specialization,
       password: hashedPassword,
+      location,
       schedule: formattedSchedule,
     });
 
@@ -83,7 +91,7 @@ const updateDoctor = async (req, res) => {
     const updatedDoctor = await Doctor.findByIdAndUpdate(doctorId, updateData, {
       new: true,
     });
-
+   
     if (!updatedDoctor)
       return res.status(404).json({ message: "Doctor not found" });
 
@@ -197,19 +205,73 @@ const updateDoctorSchedule = async () => {
 /**
  * Delete a doctor by ID
  */
+
+
+
 const deleteDoctor = async (req, res) => {
   try {
     const { doctorId } = req.params;
-    const deletedDoctor = await Doctor.findByIdAndDelete(doctorId);
-    if (!deletedDoctor)
-      return res.status(404).json({ message: "Doctor not found" });
-    res.status(200).json({ message: "Doctor deleted successfully" });
+ 
+    // Step 1: Find the doctor with populated appointments
+    const doctor = await Doctor.findById(doctorId).populate("appointments");
+    if (!doctor) return res.status(404).json({ message: "Doctor not found" });
+
+    const appointments = doctor.appointments;
+
+    for (const appointment of appointments) {
+      // Only process if the appointment is not completed
+      if (appointment.appointmentStatus !== "Completed") {
+        // const isPending = appointment.appointmentPaymentStatus === "Pending";
+        const hasNoOrderId = !appointment.appointmentOrderId || appointment.appointmentOrderId === "";
+
+        // Remove this appointment from the user's appointments array
+        await User.updateOne(
+          { email: appointment.email },
+          { $pull: { appointments: appointment._id } }
+        );
+
+        if (hasNoOrderId) {
+          const pharmacyId = appointment.medicines?.pharmacyId;
+
+          if (pharmacyId) {
+            // Delete the order from the Order collection
+            const order = await Order.findOneAndDelete({
+              appointmentId: appointment._id.toString(),
+              pharmacyId: pharmacyId,
+            });
+
+            // Remove order from pharmacy if it existed
+            if (order) {
+              await Pharmacy.updateOne(
+                { _id: pharmacyId },
+                { $pull: { orders: order._id } }
+              );
+            }
+          }
+
+          // Delete the appointment
+          await Appointment.findByIdAndDelete(appointment._id);
+        }
+      }
+    }
+
+    // Step 2: Remove the doctor from the User model (if exists)
+    // await User.findOneAndDelete({ doctorEmail: doctor.email });
+
+    // Step 3: Finally delete the doctor from Doctor collection
+    await Doctor.findByIdAndDelete(doctorId);
+
+    res.status(200).json({ message: "Doctor and related data deleted successfully" });
+
   } catch (error) {
-    res
-      .status(500)
-      .json({ message: "Error deleting doctor", error: error.message });
+    console.error("Error deleting doctor:", error);
+    res.status(500).json({
+      message: "Error deleting doctor",
+      error: error.message,
+    });
   }
 };
+
 
 const getDoctorByToken = async (req, res) => {
   try {
@@ -373,49 +435,109 @@ const getScheduleByDoctorId = async (req, res) => {
       .json({ message: "Internal server error", error: error.message });
   }
 };
+// const updateScheduleSlot = async (req, res) => {
+//   try {
+//     const { doctorId } = req.params;
+//     const { startTime, startDate, status } = req.body;
+//     console.log("Body", req.body);
+//     const doctor = await Doctor.findById(doctorId);
+//     if (!doctor) {
+//       return res.status(404).json({ message: "Doctor not found" });
+//     }
+
+//     let slotUpdated = false;
+//     for (const schedule of doctor.schedule) {
+//       if (
+//         new Date(schedule.startDate) <= new Date(startDate) &&
+//         new Date(startDate) <= new Date(schedule.endDate)
+//       ) {
+//         for (const slot of schedule.timeSlots) {
+//           console.log("Checking Slot:", slot);
+
+//           if (
+//             slot.date === formatDateToDatabase(startDate) &&
+//             slot.time === convertTo12Hour(startTime)
+//           ) {
+//             console.log("Slot Matched, Updating...");
+//             slot.status = status;
+//             slotUpdated = true;
+//             break;
+//           }
+//         }
+//         if (slotUpdated) break;
+//       }
+//     }
+
+//     if (!slotUpdated) {
+//       return res.status(404).json({ message: "Time slot not found" });
+//     }
+//     console.log(slotUpdated);
+//     console.log(doctor);
+//     await doctor.save();
+//     res.status(200).json({ message: "Schedule updated successfully" });
+//   } catch (error) {
+//     console.error("Error:", error);
+//     res
+//       .status(500)
+//       .json({ message: "Internal server error", error: error.message });
+//   }
+// };
+
 const updateScheduleSlot = async (req, res) => {
   try {
     const { doctorId } = req.params;
     const { startTime, startDate, status } = req.body;
-    console.log("Received Data:", req.body);
 
     const doctor = await Doctor.findById(doctorId);
     if (!doctor) {
       return res.status(404).json({ message: "Doctor not found" });
     }
 
+    const formattedDate = formatDateToDatabase(startDate); // "09-04-2025"
+    const formattedTime = convertTo12Hour(startTime); // "09:15 AM"
+
+    const targetDate = dayjs(formattedDate, "DD-MM-YYYY");
     let slotUpdated = false;
+
     for (const schedule of doctor.schedule) {
+      const scheduleStart = dayjs(schedule.startDate, "DD-MM-YYYY");
+      const scheduleEnd = dayjs(schedule.endDate, "DD-MM-YYYY");
+
       if (
-        new Date(schedule.startDate) <= new Date(startDate) &&
-        new Date(startDate) <= new Date(schedule.endDate)
+        targetDate.isSame(scheduleStart, "day") ||
+        targetDate.isSame(scheduleEnd, "day") ||
+        (targetDate.isAfter(scheduleStart) && targetDate.isBefore(scheduleEnd))
       ) {
         for (const slot of schedule.timeSlots) {
-          console.log("Checking Slot:", slot);
-
           if (
-            slot.date === formatDateToDatabase(startDate) &&
-            slot.time === convertTo12Hour(startTime)
+            slot.date === formattedDate &&
+            slot.time.trim().toLowerCase() ===
+              formattedTime.trim().toLowerCase() &&
+            slot.status === "available"
           ) {
-            console.log("Slot Matched, Updating...");
             slot.status = status;
             slotUpdated = true;
             break;
           }
         }
+
         if (slotUpdated) break;
       }
     }
 
     if (!slotUpdated) {
-      return res.status(404).json({ message: "Time slot not found" });
+      return res.status(404).json({
+        message: "Time slot not found or already booked/unavailable",
+      });
     }
 
     await doctor.save();
     res.status(200).json({ message: "Schedule updated successfully" });
   } catch (error) {
     console.error("Error:", error);
-    res.status(500).json({ message: "Internal server error", error: error.message });
+    res
+      .status(500)
+      .json({ message: "Internal server error", error: error.message });
   }
 };
 
@@ -424,12 +546,13 @@ const formatDateToDatabase = (dateStr) => {
   return `${day}-${month}-${year}`;
 };
 
-const convertTo12Hour = (timeStr) => {
-  let [hours, minutes] = timeStr.split(":");
-  hours = parseInt(hours);
-  let period = hours >= 12 ? "pm" : "am";
-  hours = hours % 12 || 12;
-  return `${hours}:${minutes} ${period}`;
+const convertTo12Hour = (time24) => {
+  const [hour, minute] = time24.split(":");
+  const h = parseInt(hour, 10);
+  const ampm = h >= 12 ? "PM" : "AM";
+  const hour12 = h % 12 === 0 ? 12 : h % 12;
+  return `${hour12.toString().padStart(2, "0")}:${minute} ${ampm}`;
+  // returns "09:15 AM"
 };
 const forgotPassword = async (req, res) => {
   const { email, password } = req.body;
@@ -465,5 +588,5 @@ module.exports = {
   getAllAppointmentsByDoctorEmail,
   getScheduleByDoctorId,
   updateScheduleSlot,
-  forgotPassword
+  forgotPassword,
 };

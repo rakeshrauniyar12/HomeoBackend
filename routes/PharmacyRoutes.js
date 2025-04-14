@@ -26,9 +26,11 @@ router.get(
   pharmacyController.fetchOrderByPharmacyIdAndOrderId
 );
 router.get("/getallpharmacy", pharmacyController.getAllPharmacies);
+router.get("/getallpharmacyemail", pharmacyController.getAllPharmacyEmails);
 router.put("/update/:id", pharmacyController.updatePharmacyFields);
 router.put("/updateorder", pharmacyController.updateOrderPharmacy);
 router.post("/addorder/:id", pharmacyController.addOrderToPharmacy);
 router.post("/forgotpassword", pharmacyController.forgotPassword);
+router.delete("/delete/:id", pharmacyController.deletePharmacyById);
 
 module.exports = router;
